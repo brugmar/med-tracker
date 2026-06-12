@@ -10,6 +10,9 @@ import com.medtracker.app.data.TodayStat
 import com.medtracker.app.data.decodeBackup
 import com.medtracker.app.data.encodeBackup
 import com.medtracker.app.data.startMillis
+import com.medtracker.app.report.MedicineReport
+import com.medtracker.app.report.REPORT_DAYS
+import com.medtracker.app.report.buildMedicineReport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -137,6 +140,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun updateLog(log: DoseLog) {
         refreshToday()
         viewModelScope.launch { dao.updateLog(log) }
+    }
+
+    /** Report over the 30 days before today (today excluded), for the PDF export. */
+    suspend fun medicineReportFor(medicine: Medicine): MedicineReport {
+        val today = LocalDate.now()
+        val logs = dao.logsForMedicineOnce(
+            medicine.id,
+            today.minusDays(REPORT_DAYS).startMillis(),
+            today.startMillis()
+        )
+        return withContext(Dispatchers.Default) {
+            buildMedicineReport(medicine, logs, today)
+        }
     }
 
     suspend fun exportBackupJson(): String {

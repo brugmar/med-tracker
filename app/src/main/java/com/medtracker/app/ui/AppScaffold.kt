@@ -105,7 +105,10 @@ fun MedTrackerApp(viewModel: AppViewModel) {
                         onLogged = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
                         onManageMedicines = { tab = 2 }
                     )
-                    1 -> StatsScreen(viewModel)
+                    1 -> StatsScreen(
+                        viewModel = viewModel,
+                        onMessage = { message -> scope.launch { snackbarHostState.showSnackbar(message) } }
+                    )
                     else -> MedicinesScreen(
                         viewModel = viewModel,
                         onMessage = { message -> scope.launch { snackbarHostState.showSnackbar(message) } }

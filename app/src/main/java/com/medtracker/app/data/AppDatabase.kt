@@ -59,6 +59,12 @@ interface MedTrackerDao {
     )
     fun logsForMedicineBetween(medicineId: Long, start: Long, end: Long): Flow<List<DoseLog>>
 
+    @Query(
+        "SELECT * FROM dose_logs WHERE medicineId = :medicineId " +
+            "AND timestamp >= :start AND timestamp < :end ORDER BY timestamp ASC, id ASC"
+    )
+    suspend fun logsForMedicineOnce(medicineId: Long, start: Long, end: Long): List<DoseLog>
+
     @Query("DELETE FROM dose_logs")
     suspend fun deleteAllLogs()
 

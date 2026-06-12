@@ -2,6 +2,8 @@
 
 package com.medtracker.app.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +35,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -43,10 +46,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -58,14 +63,20 @@ import com.medtracker.app.data.formatAmount
 import com.medtracker.app.data.parseTime
 import com.medtracker.app.data.toLocalDate
 import com.medtracker.app.data.toTimeString
+import com.medtracker.app.report.renderMedicineReportPdf
 import com.medtracker.app.ui.theme.MedicineAccent
 import com.medtracker.app.ui.theme.medicineAccent
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 @Composable
-fun StatsScreen(viewModel: AppViewModel) {
+fun StatsScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val medicines by viewModel.medicines.collectAsState()
     val selectedId by viewModel.statsMedicineId.collectAsState()
     val day by viewModel.statsDay.collectAsState()
@@ -90,6 +101,26 @@ fun StatsScreen(viewModel: AppViewModel) {
 
     val selectedMedicine = medicines.firstOrNull { it.id == selectedId } ?: return
     val accent = medicineAccent(selectedMedicine.id)
+
+    val reportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            runCatching {
+                val report = viewModel.medicineReportFor(selectedMedicine)
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(uri)?.use { output ->
+                        renderMedicineReportPdf(report, output)
+                    } ?: error("Could not open selected file.")
+                }
+            }.onSuccess {
+                onMessage("Report saved")
+            }.onFailure { error ->
+                onMessage("Report failed: ${error.message?.takeIf { it.isNotBlank() } ?: "Unknown error"}")
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -137,8 +168,46 @@ fun StatsScreen(viewModel: AppViewModel) {
 
         ChartCard(title = "Last 7 days", medicine = selectedMedicine, accent = accent, logs = rangeLogs, days = 7)
         ChartCard(title = "Last 30 days", medicine = selectedMedicine, accent = accent, logs = rangeLogs, days = 30)
+        ReportCard(
+            medicine = selectedMedicine,
+            onSave = { reportLauncher.launch(reportFileName(selectedMedicine)) }
+        )
         Spacer(Modifier.height(4.dp))
     }
+}
+
+@Composable
+private fun ReportCard(medicine: Medicine, onSave: () -> Unit) {
+    Surface(
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Text("Report", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(2.dp))
+            Text(
+                "Printable PDF with the last 30 days of ${medicine.name}: " +
+                    "day-by-day doses, weekly charts, sums and averages.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(onClick = onSave, modifier = Modifier.fillMaxWidth()) {
+                Text("Save PDF report")
+            }
+        }
+    }
+}
+
+private fun reportFileName(medicine: Medicine): String {
+    val slug = medicine.name.lowercase(Locale.ROOT)
+        .replace(Regex("[^a-z0-9]+"), "-")
+        .trim('-')
+        .take(40)
+        .ifEmpty { "medicine" }
+    val date = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE)
+    return "medtracker-report-$slug-$date.pdf"
 }
 
 @Composable
