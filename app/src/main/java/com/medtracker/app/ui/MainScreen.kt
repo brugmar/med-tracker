@@ -4,6 +4,7 @@ package com.medtracker.app.ui
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -191,11 +192,16 @@ private fun TodayProgressCard(medicines: List<Medicine>, stats: Map<Long, TodayS
 @Composable
 private fun MedicineCard(medicine: Medicine, todayStat: TodayStat?, onClick: () -> Unit) {
     val accent = medicineAccent(medicine.id)
+    val max = medicine.dailyMaxAmount
+    // Soft ceiling: flip the whole card to the error palette once the day goes over.
+    val overMax = max != null && todayStat != null && todayStat.total > max
 
     Surface(
         onClick = onClick,
         shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = if (overMax) MaterialTheme.colorScheme.errorContainer
+        else MaterialTheme.colorScheme.surfaceContainerLow,
+        border = if (overMax) BorderStroke(1.dp, MaterialTheme.colorScheme.error) else null,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -208,6 +214,8 @@ private fun MedicineCard(medicine: Medicine, todayStat: TodayStat?, onClick: () 
                 Text(
                     medicine.name,
                     style = MaterialTheme.typography.titleMedium,
+                    color = if (overMax) MaterialTheme.colorScheme.onErrorContainer
+                    else MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -215,7 +223,8 @@ private fun MedicineCard(medicine: Medicine, todayStat: TodayStat?, onClick: () 
                 Text(
                     "Default ${formatAmount(medicine.defaultAmount)} ${medicine.unit}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (overMax) MaterialTheme.colorScheme.onErrorContainer
+                    else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Spacer(Modifier.width(12.dp))
@@ -224,12 +233,14 @@ private fun MedicineCard(medicine: Medicine, todayStat: TodayStat?, onClick: () 
                     Text(
                         "${formatAmount(todayStat.total)} ${medicine.unit}",
                         style = MaterialTheme.typography.titleMedium,
-                        color = accent.solid
+                        color = if (overMax) MaterialTheme.colorScheme.error else accent.solid
                     )
                     Text(
-                        if (todayStat.count == 1) "1 dose today" else "${todayStat.count} doses today",
+                        if (overMax) "over ${formatAmount(max!!)} ${medicine.unit} max"
+                        else if (todayStat.count == 1) "1 dose today" else "${todayStat.count} doses today",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (overMax) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             } else {

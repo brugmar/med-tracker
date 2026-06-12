@@ -16,19 +16,18 @@ import java.time.LocalTime
 import kotlin.random.Random
 
 /**
- * Renders sample reports into the app's external files dir so they can be pulled
- * with adb and reviewed by eye:
- * adb pull /sdcard/Android/data/com.medtracker.app/files/report-sample.pdf
+ * Renders sample reports of several lengths into the app's external files dir so they can
+ * be pulled with adb and reviewed by eye:
+ * adb pull /sdcard/Android/data/com.medtracker.app/files/report-sample-30d.pdf
  */
 @RunWith(AndroidJUnit4::class)
 class ReportPdfRenderTest {
 
     private val medicine = Medicine(id = 1, name = "Ibuprofen", defaultAmount = 200.0, unit = "mg")
 
-    @Test
-    fun renderSampleReport() {
-        val today = LocalDate.now()
-        val start = today.minusDays(30)
+    /** Deterministic ~90 days of realistic-looking doses ending yesterday. */
+    private fun sampleLogs(today: LocalDate, spanDays: Int): List<DoseLog> {
+        val start = today.minusDays(spanDays.toLong())
         val random = Random(42)
         var id = 1L
         val logs = mutableListOf<DoseLog>()
@@ -44,22 +43,23 @@ class ReportPdfRenderTest {
             )
         }
 
-        (0 until 30).forEach { offset ->
+        (0 until spanDays).forEach { offset ->
             val date = start.plusDays(offset.toLong())
-            // A few deliberate shapes: a pause mid-month, a heavy day, a late-night dose.
+            // Deliberate shapes near the end so short reports also show variety.
+            val fromEnd = spanDays - offset
             when {
-                offset in 12..14 -> return@forEach // three-day gap
-                offset == 9 -> {
+                fromEnd in 16..18 -> return@forEach // a multi-day gap
+                fromEnd == 21 -> {
                     dose(date, LocalTime.of(6, 50), 400.0)
                     dose(date, LocalTime.of(11, 20), 200.0)
                     dose(date, LocalTime.of(16, 5), 200.0)
                     dose(date, LocalTime.of(22, 40), 200.0) // peak day: 1000 mg
                 }
-                offset == 20 -> {
+                fromEnd == 10 -> {
                     dose(date, LocalTime.of(1, 35), 200.0) // night bucket
                     dose(date, LocalTime.of(13, 10), 200.0)
                 }
-                offset == 24 -> {
+                fromEnd == 6 -> {
                     dose(date, LocalTime.of(9, 0), 200.0)
                     dose(date, LocalTime.of(19, 30), 1.0, unit = "tablet") // foreign unit
                 }
@@ -74,9 +74,18 @@ class ReportPdfRenderTest {
                 }
             }
         }
+        return logs
+    }
 
-        writePdf("report-sample.pdf") { out ->
-            renderMedicineReportPdf(buildMedicineReport(medicine, logs, today), out)
+    @Test
+    fun renderSampleReports() {
+        val today = LocalDate.now()
+        val logs = sampleLogs(today, spanDays = 90)
+        // One dataset, three report lengths — exercises short, default and long spans.
+        listOf(7, 30, 90).forEach { days ->
+            writePdf("report-sample-${days}d.pdf") { out ->
+                renderMedicineReportPdf(buildMedicineReport(medicine, logs, today, days = days), out)
+            }
         }
     }
 

@@ -47,4 +47,9 @@ class FormatTest {
 
         assertEquals(listOf(5.0, 10.0, 20.0), medicine.presetAmounts())
     }
+
+    @Test
+    fun newMedicineHasNoDailyMaxByDefault() {
+        assertNull(Medicine(name = "Test", defaultAmount = 10.0, unit = "mg").dailyMaxAmount)
+    }
 }

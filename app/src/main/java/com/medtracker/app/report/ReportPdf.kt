@@ -299,11 +299,13 @@ private class ReportPdfRenderer(private val report: MedicineReport) {
 
     private fun addOverviewChart() {
         val values = report.days.map { it.primaryTotal }
-        // Label every 5th day plus the last one; repeat the month name when it changes.
+        // Aim for ~6 evenly spaced labels whatever the report length; repeat the month
+        // name whenever it changes so both short and long periods stay readable.
+        val step = max(1, (report.dayCount + 3) / 6)
         var labelledMonth = 0
         val labels = report.days.mapIndexed { index, day ->
             val last = index == report.days.lastIndex
-            if (index % 5 != 0 && !(last && index % 5 >= 2)) return@mapIndexed ""
+            if (index % step != 0 && !(last && index % step >= 2)) return@mapIndexed ""
             val withMonth = day.date.monthValue != labelledMonth
             labelledMonth = day.date.monthValue
             if (withMonth) day.date.format(DAY_MONTH) else day.date.dayOfMonth.toString()

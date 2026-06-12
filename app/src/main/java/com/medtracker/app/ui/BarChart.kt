@@ -8,6 +8,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -37,10 +38,12 @@ fun BarChart(
     highlightIndex: Int = values.lastIndex,
     showValues: Boolean = false,
     averageValue: Double? = null,
+    maxLine: Double? = null,
     emptyText: String = "No doses in this period"
 ) {
     val gridColor = MaterialTheme.colorScheme.outlineVariant
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val overColor = MaterialTheme.colorScheme.error
     val textMeasurer = rememberTextMeasurer()
     val labelStyle = TextStyle(fontSize = 10.sp, color = labelColor)
     val highlightLabelStyle =
@@ -56,7 +59,10 @@ fun BarChart(
         val chartHeight = chartBottom - valueHeight
         val slot = size.width / values.size
         val barWidth = slot * 0.58f
-        val maxValue = (values.maxOrNull() ?: 0.0).takeIf { it > 0 }
+        // Keep the max line on-chart by folding it into the y-scale.
+        val scaleRef = maxOf(values.maxOrNull() ?: 0.0, maxLine ?: 0.0)
+        val maxValue = scaleRef.takeIf { it > 0 }
+        val limit = maxLine?.takeIf { it > 0 }
 
         drawLine(gridColor, Offset(0f, chartBottom), Offset(size.width, chartBottom), 1.dp.toPx())
 
@@ -94,16 +100,7 @@ fun BarChart(
                     (value / maxValue * chartHeight).toFloat().coerceAtLeast(3.dp.toPx())
                 val top = chartBottom - barHeight
                 val corner = CornerRadius(barWidth * 0.32f)
-                val path = Path().apply {
-                    addRoundRect(
-                        RoundRect(
-                            Rect(left, top, left + barWidth, chartBottom),
-                            topLeft = corner,
-                            topRight = corner
-                        )
-                    )
-                }
-                val brush = if (highlighted) {
+                val accentBrush = if (highlighted) {
                     Brush.verticalGradient(
                         colors = listOf(barColor, barColor.copy(alpha = 0.8f)),
                         startY = top,
@@ -116,7 +113,44 @@ fun BarChart(
                         endY = chartBottom
                     )
                 }
-                drawPath(path, brush)
+
+                val maxY = limit?.let { chartBottom - (it / maxValue * chartHeight).toFloat() }
+                if (maxY != null && value > limit && maxY > top) {
+                    // Portion below the limit keeps the accent; the excess is drawn red.
+                    drawRect(
+                        brush = accentBrush,
+                        topLeft = Offset(left, maxY),
+                        size = Size(barWidth, chartBottom - maxY)
+                    )
+                    val overPath = Path().apply {
+                        addRoundRect(
+                            RoundRect(
+                                Rect(left, top, left + barWidth, maxY),
+                                topLeft = corner,
+                                topRight = corner
+                            )
+                        )
+                    }
+                    drawPath(
+                        overPath,
+                        Brush.verticalGradient(
+                            colors = listOf(overColor, overColor.copy(alpha = 0.85f)),
+                            startY = top,
+                            endY = maxY
+                        )
+                    )
+                } else {
+                    val path = Path().apply {
+                        addRoundRect(
+                            RoundRect(
+                                Rect(left, top, left + barWidth, chartBottom),
+                                topLeft = corner,
+                                topRight = corner
+                            )
+                        )
+                    }
+                    drawPath(path, accentBrush)
+                }
 
                 if (showValues) {
                     val layout = textMeasurer.measure(AnnotatedString(formatAmount(value)), valueStyle)
@@ -144,6 +178,18 @@ fun BarChart(
                     )
                 )
             }
+        }
+
+        // Red dashed line at the daily maximum, drawn on top of the bars.
+        limit?.let { lim ->
+            val y = chartBottom - (lim / maxValue * chartHeight).toFloat()
+            drawLine(
+                color = overColor,
+                start = Offset(0f, y),
+                end = Offset(size.width, y),
+                strokeWidth = 1.2.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx()))
+            )
         }
     }
 }

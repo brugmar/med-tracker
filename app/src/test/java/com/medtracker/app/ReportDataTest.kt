@@ -3,6 +3,8 @@ package com.medtracker.app
 import com.medtracker.app.data.DoseLog
 import com.medtracker.app.data.Medicine
 import com.medtracker.app.data.atTimeMillis
+import com.medtracker.app.report.MAX_REPORT_DAYS
+import com.medtracker.app.report.MIN_REPORT_DAYS
 import com.medtracker.app.report.buildMedicineReport
 import com.medtracker.app.report.formatUnitTotals
 import org.junit.Assert.assertEquals
@@ -161,6 +163,48 @@ class ReportDataTest {
         )
 
         assertEquals(listOf(1, 2, 1, 1), report.timeOfDayCounts)
+    }
+
+    @Test
+    fun customDayCountSetsWindowAndCount() {
+        val report = buildMedicineReport(medicine, emptyList(), reportDate, days = 7)
+
+        assertEquals(reportDate.minusDays(7), report.startDate)
+        assertEquals(reportDate.minusDays(1), report.endDate)
+        assertEquals(7, report.dayCount)
+        assertEquals(7, report.weeks.sumOf { it.days.size })
+        assertTrue(report.weeks.all { it.weekStart.dayOfWeek == DayOfWeek.MONDAY })
+    }
+
+    @Test
+    fun customDayCountStillRespectsWindow() {
+        // 14-day report: window is [reportDate-14 .. reportDate-1], inclusive.
+        val report = buildMedicineReport(
+            medicine,
+            listOf(
+                log(reportDate.minusDays(15)),  // before the window -> excluded
+                log(reportDate.minusDays(14)),  // first day of the window
+                log(reportDate.minusDays(1))    // last day of the window
+            ),
+            reportDate,
+            days = 14
+        )
+
+        assertEquals(14, report.dayCount)
+        assertEquals(2, report.doseCount)
+        assertEquals(reportDate.minusDays(14), report.days.first().date)
+    }
+
+    @Test
+    fun dayCountIsClampedToBounds() {
+        assertEquals(
+            MIN_REPORT_DAYS,
+            buildMedicineReport(medicine, emptyList(), reportDate, days = 0).dayCount
+        )
+        assertEquals(
+            MAX_REPORT_DAYS,
+            buildMedicineReport(medicine, emptyList(), reportDate, days = 10_000).dayCount
+        )
     }
 
     @Test

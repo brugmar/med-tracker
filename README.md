@@ -7,9 +7,10 @@ A small Android app to track medicine intake.
   taken today and the number of doses.
 - **Stats tab** — pick a medicine and a day to see the total and every single dose that day
   (entries can be corrected or deleted if logged by mistake), plus bar charts for the last 7 and last 30 days.
-  From here you can also save a printable, black-and-white **PDF report** of the last 30 days
-  (current day excluded): a 30-day summary with charts, then week-by-week sections with a bar
-  chart, sum and per-day average, and a day-by-day dose table.
+  From here you can also save a printable, black-and-white **PDF report** for a chosen number
+  of days (default 30, current day excluded — quick presets 7/30/90 or any value up to 366):
+  a summary with charts, then week-by-week sections with a bar chart, sum and per-day average,
+  and a day-by-day dose table.
 - **Medicines tab** — add, edit, or delete medicines. A medicine has a name, a default
   dose amount, a unit (mg, tablet, ml, …), and three quick-dose buttons shown while
   logging a dose. It can also export/import a JSON backup through Android's document

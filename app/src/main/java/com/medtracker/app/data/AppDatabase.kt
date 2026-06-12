@@ -80,7 +80,7 @@ interface MedTrackerDao {
     }
 }
 
-@Database(entities = [Medicine::class, DoseLog::class], version = 2, exportSchema = false)
+@Database(entities = [Medicine::class, DoseLog::class], version = 3, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun dao(): MedTrackerDao
@@ -96,7 +96,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "medtracker.db"
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                     .also { instance = it }
             }
@@ -140,6 +140,13 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                 db.execSQL("DROP TABLE medicines")
                 db.execSQL("ALTER TABLE medicines_new RENAME TO medicines")
+            }
+        }
+
+        // Adds the optional soft daily ceiling; NULL means "no maximum set".
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE medicines ADD COLUMN dailyMaxAmount REAL")
             }
         }
     }

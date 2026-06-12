@@ -11,8 +11,12 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.temporal.TemporalAdjusters
 
-/** Days covered by a report: the 30 days before — and not including — the report day. */
-const val REPORT_DAYS = 30L
+/** Default report span: the 30 days before — and not including — the report day. */
+const val DEFAULT_REPORT_DAYS = 30
+
+/** Bounds on a user-chosen report span, to keep the PDF a sane size. */
+const val MIN_REPORT_DAYS = 1
+const val MAX_REPORT_DAYS = 366
 
 /** One calendar day of the report; [doses] are chronological and may be empty. */
 class ReportDay(
@@ -81,16 +85,19 @@ class MedicineReport(
 }
 
 /**
- * Builds the report for the 30 days before [reportDate] ([reportDate] itself excluded).
- * Logs outside the window are dropped, so callers may pass a loosely filtered list.
+ * Builds the report for the [days] days before [reportDate] ([reportDate] itself excluded).
+ * [days] is clamped to [[MIN_REPORT_DAYS], [MAX_REPORT_DAYS]]. Logs outside the window are
+ * dropped, so callers may pass a loosely filtered list.
  */
 fun buildMedicineReport(
     medicine: Medicine,
     logs: List<DoseLog>,
     reportDate: LocalDate = LocalDate.now(),
-    generatedAt: LocalDateTime = LocalDateTime.now()
+    generatedAt: LocalDateTime = LocalDateTime.now(),
+    days: Int = DEFAULT_REPORT_DAYS
 ): MedicineReport {
-    val start = reportDate.minusDays(REPORT_DAYS)
+    val window = days.coerceIn(MIN_REPORT_DAYS, MAX_REPORT_DAYS)
+    val start = reportDate.minusDays(window.toLong())
     val end = reportDate.minusDays(1)
 
     val byDate = logs

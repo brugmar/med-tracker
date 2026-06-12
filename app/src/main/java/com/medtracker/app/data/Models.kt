@@ -18,7 +18,10 @@ data class Medicine(
     val unit: String,
     val presetAmount1: Double = defaultAmount * 0.5,
     val presetAmount2: Double = defaultAmount,
-    val presetAmount3: Double = defaultAmount * 2
+    val presetAmount3: Double = defaultAmount * 2,
+    // Optional soft daily ceiling. When set and the day's total goes above it,
+    // the UI flags it (red button, red on charts) but never blocks logging.
+    val dailyMaxAmount: Double? = null
 )
 
 @Entity(tableName = "dose_logs")

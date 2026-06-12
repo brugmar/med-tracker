@@ -47,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,6 +64,9 @@ import com.medtracker.app.data.formatAmount
 import com.medtracker.app.data.parseTime
 import com.medtracker.app.data.toLocalDate
 import com.medtracker.app.data.toTimeString
+import com.medtracker.app.report.DEFAULT_REPORT_DAYS
+import com.medtracker.app.report.MAX_REPORT_DAYS
+import com.medtracker.app.report.MIN_REPORT_DAYS
 import com.medtracker.app.report.renderMedicineReportPdf
 import com.medtracker.app.ui.theme.MedicineAccent
 import com.medtracker.app.ui.theme.medicineAccent
@@ -102,13 +106,19 @@ fun StatsScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
     val selectedMedicine = medicines.firstOrNull { it.id == selectedId } ?: return
     val accent = medicineAccent(selectedMedicine.id)
 
+    // User-chosen length of the PDF report; defaults to 30 days, editable below.
+    var reportDaysText by rememberSaveable { mutableStateOf(DEFAULT_REPORT_DAYS.toString()) }
+    val reportDays = reportDaysText.toIntOrNull()
+    val reportDaysValid = reportDays != null && reportDays in MIN_REPORT_DAYS..MAX_REPORT_DAYS
+
     val reportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf")
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
+        val days = reportDays ?: DEFAULT_REPORT_DAYS
         scope.launch {
             runCatching {
-                val report = viewModel.medicineReportFor(selectedMedicine)
+                val report = viewModel.medicineReportFor(selectedMedicine, days)
                 withContext(Dispatchers.IO) {
                     context.contentResolver.openOutputStream(uri)?.use { output ->
                         renderMedicineReportPdf(report, output)
@@ -170,14 +180,29 @@ fun StatsScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
         ChartCard(title = "Last 30 days", medicine = selectedMedicine, accent = accent, logs = rangeLogs, days = 30)
         ReportCard(
             medicine = selectedMedicine,
-            onSave = { reportLauncher.launch(reportFileName(selectedMedicine)) }
+            daysText = reportDaysText,
+            daysValid = reportDaysValid,
+            onDaysChange = { input -> reportDaysText = input.filter { it.isDigit() }.take(3) },
+            onSave = {
+                reportLauncher.launch(
+                    reportFileName(selectedMedicine, reportDays ?: DEFAULT_REPORT_DAYS)
+                )
+            }
         )
         Spacer(Modifier.height(4.dp))
     }
 }
 
+private val REPORT_DAY_PRESETS = listOf(7, 30, 90)
+
 @Composable
-private fun ReportCard(medicine: Medicine, onSave: () -> Unit) {
+private fun ReportCard(
+    medicine: Medicine,
+    daysText: String,
+    daysValid: Boolean,
+    onDaysChange: (String) -> Unit,
+    onSave: () -> Unit
+) {
     Surface(
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -187,27 +212,66 @@ private fun ReportCard(medicine: Medicine, onSave: () -> Unit) {
             Text("Report", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(2.dp))
             Text(
-                "Printable PDF with the last 30 days of ${medicine.name}: " +
-                    "day-by-day doses, weekly charts, sums and averages.",
+                "Printable PDF for ${medicine.name}, ending yesterday — day-by-day doses, " +
+                    "weekly charts, sums and averages. Choose how many days to include.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            Spacer(Modifier.height(14.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedTextField(
+                    value = daysText,
+                    onValueChange = onDaysChange,
+                    label = { Text("Days") },
+                    singleLine = true,
+                    isError = !daysValid,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.width(104.dp)
+                )
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    REPORT_DAY_PRESETS.forEach { preset ->
+                        FilterChip(
+                            selected = daysText.toIntOrNull() == preset,
+                            onClick = { onDaysChange(preset.toString()) },
+                            label = { Text("$preset") }
+                        )
+                    }
+                }
+            }
+            if (!daysValid) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Enter a whole number of days between $MIN_REPORT_DAYS and $MAX_REPORT_DAYS.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
             Spacer(Modifier.height(12.dp))
-            OutlinedButton(onClick = onSave, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(
+                onClick = onSave,
+                enabled = daysValid,
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Text("Save PDF report")
             }
         }
     }
 }
 
-private fun reportFileName(medicine: Medicine): String {
+private fun reportFileName(medicine: Medicine, days: Int): String {
     val slug = medicine.name.lowercase(Locale.ROOT)
         .replace(Regex("[^a-z0-9]+"), "-")
         .trim('-')
         .take(40)
         .ifEmpty { "medicine" }
     val date = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE)
-    return "medtracker-report-$slug-$date.pdf"
+    return "medtracker-report-$slug-${days}d-$date.pdf"
 }
 
 @Composable
@@ -225,6 +289,12 @@ private fun DayCard(
     var logToEditTime by remember { mutableStateOf<DoseLog?>(null) }
     val today = LocalDate.now()
     val total = logs.sumOf { it.amount }
+    val overMax = medicine.dailyMaxAmount?.let { total > it } ?: false
+    val totalColor = when {
+        overMax -> MaterialTheme.colorScheme.error
+        total > 0 -> accent.solid
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
 
     Surface(
         shape = MaterialTheme.shapes.large,
@@ -265,21 +335,25 @@ private fun DayCard(
                 Text(
                     formatAmount(total),
                     style = MaterialTheme.typography.displaySmall,
-                    color = if (total > 0) accent.solid else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = totalColor,
                     modifier = Modifier.alignByBaseline()
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
                     medicine.unit,
                     style = MaterialTheme.typography.titleMedium,
-                    color = if (total > 0) accent.solid else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = totalColor,
                     modifier = Modifier.alignByBaseline()
                 )
             }
             Text(
-                if (logs.size == 1) "1 dose" else "${logs.size} doses",
+                buildString {
+                    append(if (logs.size == 1) "1 dose" else "${logs.size} doses")
+                    if (overMax) append(" · over ${formatAmount(medicine.dailyMaxAmount!!)} ${medicine.unit} max")
+                },
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (overMax) MaterialTheme.colorScheme.error
+                else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
 
@@ -453,7 +527,11 @@ private fun ChartCard(
             Text(title, style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(2.dp))
             Text(
-                "Total ${formatAmount(total)} ${medicine.unit} · avg excl. today ${formatAmount(averageExcludingToday)} ${medicine.unit}/day",
+                buildString {
+                    append("Total ${formatAmount(total)} ${medicine.unit} · avg excl. today ")
+                    append("${formatAmount(averageExcludingToday)} ${medicine.unit}/day")
+                    medicine.dailyMaxAmount?.let { append(" · max ${formatAmount(it)} ${medicine.unit}/day") }
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -464,6 +542,7 @@ private fun ChartCard(
                 barColor = accent.solid,
                 showValues = days <= 7,
                 averageValue = averageExcludingToday,
+                maxLine = medicine.dailyMaxAmount,
                 modifier = Modifier.fillMaxWidth().height(168.dp)
             )
         }

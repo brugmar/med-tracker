@@ -170,8 +170,8 @@ fun MedicinesScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
         MedicineDialog(
             existing = null,
             onDismiss = { showAddDialog = false },
-            onSave = { name, amount, unit, preset1, preset2, preset3 ->
-                viewModel.addMedicine(name, amount, unit, preset1, preset2, preset3)
+            onSave = { name, amount, unit, preset1, preset2, preset3, dailyMax ->
+                viewModel.addMedicine(name, amount, unit, preset1, preset2, preset3, dailyMax)
                 showAddDialog = false
             }
         )
@@ -181,7 +181,7 @@ fun MedicinesScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
         MedicineDialog(
             existing = medicine,
             onDismiss = { medicineToEdit = null },
-            onSave = { name, amount, unit, preset1, preset2, preset3 ->
+            onSave = { name, amount, unit, preset1, preset2, preset3, dailyMax ->
                 viewModel.updateMedicine(
                     medicine.copy(
                         name = name,
@@ -189,7 +189,8 @@ fun MedicinesScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
                         unit = unit,
                         presetAmount1 = preset1,
                         presetAmount2 = preset2,
-                        presetAmount3 = preset3
+                        presetAmount3 = preset3,
+                        dailyMaxAmount = dailyMax
                     )
                 )
                 medicineToEdit = null
@@ -306,7 +307,12 @@ private fun MedicineRow(medicine: Medicine, onEdit: () -> Unit, onDelete: () -> 
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    "Default ${formatAmount(medicine.defaultAmount)} ${medicine.unit}",
+                    buildString {
+                        append("Default ${formatAmount(medicine.defaultAmount)} ${medicine.unit}")
+                        medicine.dailyMaxAmount?.let {
+                            append(" · max ${formatAmount(it)} ${medicine.unit}/day")
+                        }
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -341,7 +347,8 @@ private fun MedicineDialog(
         unit: String,
         presetAmount1: Double,
         presetAmount2: Double,
-        presetAmount3: Double
+        presetAmount3: Double,
+        dailyMaxAmount: Double?
     ) -> Unit
 ) {
     var name by remember { mutableStateOf(existing?.name ?: "") }
@@ -350,14 +357,20 @@ private fun MedicineDialog(
     var preset1Text by remember { mutableStateOf(existing?.let { formatAmount(it.presetAmount1) } ?: "") }
     var preset2Text by remember { mutableStateOf(existing?.let { formatAmount(it.presetAmount2) } ?: "") }
     var preset3Text by remember { mutableStateOf(existing?.let { formatAmount(it.presetAmount3) } ?: "") }
+    var maxText by remember { mutableStateOf(existing?.dailyMaxAmount?.let { formatAmount(it) } ?: "") }
     var presetsEdited by remember(existing) { mutableStateOf(existing != null) }
 
     val amount = parseAmount(amountText)
     val preset1 = parseAmount(preset1Text)
     val preset2 = parseAmount(preset2Text)
     val preset3 = parseAmount(preset3Text)
+    val maxAmount = parseAmount(maxText)
     val presetsValid = listOf(preset1, preset2, preset3).all { it != null && it > 0 }
-    val valid = name.isNotBlank() && unit.isNotBlank() && amount != null && amount > 0 && presetsValid
+    // The daily max is optional: blank is fine, but a typed value must be positive.
+    val maxValid = maxText.isBlank() || (maxAmount != null && maxAmount > 0)
+    val dailyMax = maxAmount.takeIf { maxText.isNotBlank() }
+    val valid = name.isNotBlank() && unit.isNotBlank() && amount != null && amount > 0 &&
+        presetsValid && maxValid
 
     LaunchedEffect(amountText) {
         if (!presetsEdited && amount != null && amount > 0) {
@@ -417,6 +430,23 @@ private fun MedicineDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                OutlinedTextField(
+                    value = maxText,
+                    onValueChange = { maxText = it },
+                    label = { Text("Daily max (optional)") },
+                    singleLine = true,
+                    isError = !maxValid,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    suffix = { if (unit.isNotBlank()) Text(unit) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    if (!maxValid) "Enter a number above 0, or leave empty for no limit."
+                    else "Over this daily total the home button and charts turn red — nothing is blocked.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (!maxValid) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 Text(
                     "Quick doses",
                     style = MaterialTheme.typography.titleSmall,
@@ -454,7 +484,7 @@ private fun MedicineDialog(
         confirmButton = {
             TextButton(
                 enabled = valid,
-                onClick = { onSave(name.trim(), amount!!, unit.trim(), preset1!!, preset2!!, preset3!!) }
+                onClick = { onSave(name.trim(), amount!!, unit.trim(), preset1!!, preset2!!, preset3!!, dailyMax) }
             ) { Text("Save") }
         },
         dismissButton = {

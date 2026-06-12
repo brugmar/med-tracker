@@ -27,6 +27,7 @@ fun encodeBackup(medicines: List<Medicine>, doseLogs: List<DoseLog>): String {
                         .put("presetAmount1", medicine.presetAmount1)
                         .put("presetAmount2", medicine.presetAmount2)
                         .put("presetAmount3", medicine.presetAmount3)
+                        .apply { medicine.dailyMaxAmount?.let { put("dailyMaxAmount", it) } }
                 )
             }
         })
@@ -64,7 +65,8 @@ fun decodeBackup(text: String): BackupData {
             unit = json.getString("unit"),
             presetAmount1 = json.optPreset("presetAmount1", defaultAmount * 0.5),
             presetAmount2 = json.optPreset("presetAmount2", defaultAmount),
-            presetAmount3 = json.optPreset("presetAmount3", defaultAmount * 2)
+            presetAmount3 = json.optPreset("presetAmount3", defaultAmount * 2),
+            dailyMaxAmount = json.optNullableDouble("dailyMaxAmount")
         )
     }
 
@@ -90,6 +92,9 @@ private fun JSONObject.requireArray(name: String): JSONArray =
 private fun JSONObject.optPreset(name: String, defaultValue: Double): Double =
     if (has(name)) getDouble(name) else defaultValue
 
+private fun JSONObject.optNullableDouble(name: String): Double? =
+    if (has(name) && !isNull(name)) getDouble(name) else null
+
 private fun <T> JSONArray.mapObjects(block: (JSONObject) -> T): List<T> =
     List(length()) { index -> block(getJSONObject(index)) }
 
@@ -107,6 +112,9 @@ private fun validateBackup(medicines: List<Medicine>, doseLogs: List<DoseLog>) {
         require(medicine.defaultAmount > 0) { "Backup contains an invalid default dose." }
         require(medicine.presetAmounts().all { it > 0 }) {
             "Backup contains an invalid quick dose."
+        }
+        medicine.dailyMaxAmount?.let {
+            require(it > 0) { "Backup contains an invalid daily maximum." }
         }
     }
     doseLogs.forEach { log ->

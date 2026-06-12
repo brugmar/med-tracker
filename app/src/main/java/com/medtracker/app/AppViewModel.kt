@@ -10,8 +10,10 @@ import com.medtracker.app.data.TodayStat
 import com.medtracker.app.data.decodeBackup
 import com.medtracker.app.data.encodeBackup
 import com.medtracker.app.data.startMillis
+import com.medtracker.app.report.DEFAULT_REPORT_DAYS
+import com.medtracker.app.report.MAX_REPORT_DAYS
+import com.medtracker.app.report.MIN_REPORT_DAYS
 import com.medtracker.app.report.MedicineReport
-import com.medtracker.app.report.REPORT_DAYS
 import com.medtracker.app.report.buildMedicineReport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -94,7 +96,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         unit: String,
         presetAmount1: Double,
         presetAmount2: Double,
-        presetAmount3: Double
+        presetAmount3: Double,
+        dailyMaxAmount: Double?
     ) {
         viewModelScope.launch {
             dao.insertMedicine(
@@ -104,7 +107,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     unit = unit.trim(),
                     presetAmount1 = presetAmount1,
                     presetAmount2 = presetAmount2,
-                    presetAmount3 = presetAmount3
+                    presetAmount3 = presetAmount3,
+                    dailyMaxAmount = dailyMaxAmount
                 )
             )
         }
@@ -142,16 +146,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { dao.updateLog(log) }
     }
 
-    /** Report over the 30 days before today (today excluded), for the PDF export. */
-    suspend fun medicineReportFor(medicine: Medicine): MedicineReport {
+    /** Report over the [days] days before today (today excluded), for the PDF export. */
+    suspend fun medicineReportFor(
+        medicine: Medicine,
+        days: Int = DEFAULT_REPORT_DAYS
+    ): MedicineReport {
+        val window = days.coerceIn(MIN_REPORT_DAYS, MAX_REPORT_DAYS)
         val today = LocalDate.now()
         val logs = dao.logsForMedicineOnce(
             medicine.id,
-            today.minusDays(REPORT_DAYS).startMillis(),
+            today.minusDays(window.toLong()).startMillis(),
             today.startMillis()
         )
         return withContext(Dispatchers.Default) {
-            buildMedicineReport(medicine, logs, today)
+            buildMedicineReport(medicine, logs, today, days = window)
         }
     }
 
