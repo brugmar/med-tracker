@@ -1,0 +1,4 @@
+<resources>
+    <!-- Compose draws everything; this just removes the system ActionBar. -->
+    <style name="Theme.MedTracker" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
