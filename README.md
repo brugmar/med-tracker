@@ -21,6 +21,15 @@ Data is stored locally on the phone in an SQLite database (Room). No internet, n
 Tech stack: Kotlin, Jetpack Compose (Material 3), Room, single-activity architecture.
 `minSdk 26` (Android 8.0+), `targetSdk 35`.
 
+## Samsung Galaxy S25+ compatibility
+
+The app is configured for modern Samsung phones such as the **Samsung Galaxy S25+ 5G
+SM-S936**: it targets Android 15/API 35, supports Android 8.0+, uses density-independent
+Compose layouts, includes `arm64-v8a` APK support, and declares the main activity as
+resizable with keyboard resize behavior enabled. Main screens and dialogs use scrolling or
+wrapping controls so medicine names, units, quick-dose chips, and report options remain
+usable on the S25+ 6.7" display.
+
 ---
 
 ## Project layout

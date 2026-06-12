@@ -49,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.medtracker.app.AppViewModel
 import com.medtracker.app.data.DoseLog
@@ -249,6 +250,8 @@ private fun DayCard(
                         Text(
                             "${formatAmount(log.amount)} ${log.unit}",
                             style = MaterialTheme.typography.bodyLarge,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
                         )
                         IconButton(onClick = { logToEditTime = log }) {

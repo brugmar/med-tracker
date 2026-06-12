@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 
 package com.medtracker.app.ui
 
@@ -9,6 +9,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -224,23 +227,33 @@ private fun MedicineCard(medicine: Medicine, todayStat: TodayStat?, onClick: () 
                     "Default ${formatAmount(medicine.defaultAmount)} ${medicine.unit}",
                     style = MaterialTheme.typography.bodySmall,
                     color = if (overMax) MaterialTheme.colorScheme.onErrorContainer
-                    else MaterialTheme.colorScheme.onSurfaceVariant
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
             Spacer(Modifier.width(12.dp))
             if (todayStat != null) {
-                Column(horizontalAlignment = Alignment.End) {
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    modifier = Modifier.widthIn(max = 148.dp)
+                ) {
                     Text(
                         "${formatAmount(todayStat.total)} ${medicine.unit}",
                         style = MaterialTheme.typography.titleMedium,
-                        color = if (overMax) MaterialTheme.colorScheme.error else accent.solid
+                        color = if (overMax) MaterialTheme.colorScheme.error else accent.solid,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         if (overMax) "over ${formatAmount(max!!)} ${medicine.unit} max"
                         else if (todayStat.count == 1) "1 dose today" else "${todayStat.count} doses today",
                         style = MaterialTheme.typography.bodySmall,
                         color = if (overMax) MaterialTheme.colorScheme.error
-                        else MaterialTheme.colorScheme.onSurfaceVariant
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.End
                     )
                 }
             } else {
@@ -304,9 +317,10 @@ private fun TakeDoseDialog(
         title = { Text("Log ${medicine.name}") },
         text = {
             Column(Modifier.fillMaxWidth()) {
-                Row(
+                FlowRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     medicine.presetAmounts().forEach { preset ->
                         FilterChip(
