@@ -5,6 +5,9 @@ import com.medtracker.app.data.parseAmount
 import com.medtracker.app.data.Medicine
 import com.medtracker.app.data.parseTime
 import com.medtracker.app.data.presetAmounts
+import com.medtracker.app.ui.theme.medicineColorHex
+import com.medtracker.app.ui.theme.normalizeMedicineColorHex
+import com.medtracker.app.ui.theme.parseMedicineColorHex
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -51,5 +54,18 @@ class FormatTest {
     @Test
     fun newMedicineHasNoDailyMaxByDefault() {
         assertNull(Medicine(name = "Test", defaultAmount = 10.0, unit = "mg").dailyMaxAmount)
+    }
+
+    @Test
+    fun newMedicineHasNoChosenColorByDefault() {
+        assertNull(Medicine(name = "Test", defaultAmount = 10.0, unit = "mg").colorKey)
+    }
+
+    @Test
+    fun colorHexNormalizesAndParses() {
+        assertEquals("#2A7FFF", normalizeMedicineColorHex("2a7fff"))
+        assertEquals("#2A7FFF", medicineColorHex(42, 127, 255))
+        assertEquals(42, parseMedicineColorHex("#2A7FFF")?.red)
+        assertNull(normalizeMedicineColorHex("not-a-color"))
     }
 }

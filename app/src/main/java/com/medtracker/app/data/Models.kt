@@ -21,7 +21,10 @@ data class Medicine(
     val presetAmount3: Double = defaultAmount * 2,
     // Optional soft daily ceiling. When set and the day's total goes above it,
     // the UI flags it (red button, red on charts) but never blocks logging.
-    val dailyMaxAmount: Double? = null
+    val dailyMaxAmount: Double? = null,
+    // Optional custom color chosen by the user, stored as #RRGGBB. Null keeps
+    // the old stable id-based accent assignment for existing medicines.
+    val colorKey: String? = null
 )
 
 @Entity(tableName = "dose_logs")

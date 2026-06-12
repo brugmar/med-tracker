@@ -6,6 +6,9 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import com.medtracker.app.data.Medicine
+import java.util.Locale
 
 // Brand palette: teal seed with teal-cast neutrals and a warm honey tertiary.
 
@@ -96,28 +99,136 @@ data class MedicineAccent(
     val onContainer: Color
 )
 
-private val LightAccents = listOf(
-    MedicineAccent(Color(0xFF00696B), Color(0xFF9CF1F2), Color(0xFF002020)), // teal
-    MedicineAccent(Color(0xFF4E57A9), Color(0xFFDFE0FF), Color(0xFF030865)), // indigo
-    MedicineAccent(Color(0xFF7A5900), Color(0xFFFFDEA6), Color(0xFF261A00)), // honey
-    MedicineAccent(Color(0xFF9C413B), Color(0xFFFFDAD6), Color(0xFF410005)), // coral
-    MedicineAccent(Color(0xFF6D4EA2), Color(0xFFEBDCFF), Color(0xFF270057)), // lavender
-    MedicineAccent(Color(0xFF3E6837), Color(0xFFBFF0B1), Color(0xFF002204)), // sage
+@Immutable
+data class MedicineColorOption(
+    val key: String,
+    val label: String,
+    val light: MedicineAccent,
+    val dark: MedicineAccent
 )
 
-private val DarkAccents = listOf(
-    MedicineAccent(Color(0xFF80D4D6), Color(0xFF004F51), Color(0xFF9CF1F2)),
-    MedicineAccent(Color(0xFFBDC2FF), Color(0xFF363F90), Color(0xFFDFE0FF)),
-    MedicineAccent(Color(0xFFEDC148), Color(0xFF5C4200), Color(0xFFFFDEA6)),
-    MedicineAccent(Color(0xFFFFB3AC), Color(0xFF7D2B26), Color(0xFFFFDAD6)),
-    MedicineAccent(Color(0xFFD4BBFF), Color(0xFF553788), Color(0xFFEBDCFF)),
-    MedicineAccent(Color(0xFFA3D399), Color(0xFF275022), Color(0xFFBFF0B1)),
+val MedicineColorOptions = listOf(
+    MedicineColorOption(
+        key = "teal",
+        label = "Teal",
+        light = MedicineAccent(Color(0xFF00696B), Color(0xFF9CF1F2), Color(0xFF002020)),
+        dark = MedicineAccent(Color(0xFF80D4D6), Color(0xFF004F51), Color(0xFF9CF1F2))
+    ),
+    MedicineColorOption(
+        key = "indigo",
+        label = "Indigo",
+        light = MedicineAccent(Color(0xFF4E57A9), Color(0xFFDFE0FF), Color(0xFF030865)),
+        dark = MedicineAccent(Color(0xFFBDC2FF), Color(0xFF363F90), Color(0xFFDFE0FF))
+    ),
+    MedicineColorOption(
+        key = "honey",
+        label = "Honey",
+        light = MedicineAccent(Color(0xFF7A5900), Color(0xFFFFDEA6), Color(0xFF261A00)),
+        dark = MedicineAccent(Color(0xFFEDC148), Color(0xFF5C4200), Color(0xFFFFDEA6))
+    ),
+    MedicineColorOption(
+        key = "coral",
+        label = "Coral",
+        light = MedicineAccent(Color(0xFF9C413B), Color(0xFFFFDAD6), Color(0xFF410005)),
+        dark = MedicineAccent(Color(0xFFFFB3AC), Color(0xFF7D2B26), Color(0xFFFFDAD6))
+    ),
+    MedicineColorOption(
+        key = "lavender",
+        label = "Lavender",
+        light = MedicineAccent(Color(0xFF6D4EA2), Color(0xFFEBDCFF), Color(0xFF270057)),
+        dark = MedicineAccent(Color(0xFFD4BBFF), Color(0xFF553788), Color(0xFFEBDCFF))
+    ),
+    MedicineColorOption(
+        key = "sage",
+        label = "Sage",
+        light = MedicineAccent(Color(0xFF3E6837), Color(0xFFBFF0B1), Color(0xFF002204)),
+        dark = MedicineAccent(Color(0xFFA3D399), Color(0xFF275022), Color(0xFFBFF0B1))
+    )
 )
+
+@Immutable
+data class MedicineRgb(val red: Int, val green: Int, val blue: Int)
 
 /** Stable accent for a medicine, picked by id so it never changes for that medicine. */
 @Composable
 fun medicineAccent(id: Long): MedicineAccent {
-    val accents = if (isSystemInDarkTheme()) DarkAccents else LightAccents
-    val index = ((id % accents.size) + accents.size) % accents.size
-    return accents[index.toInt()]
+    return medicineAccentForOption(defaultMedicineColorKey(id))
+}
+
+/** User-selected accent, falling back to the legacy id-based accent when unset. */
+@Composable
+fun medicineAccent(medicine: Medicine): MedicineAccent {
+    return medicineAccentForOption(medicine.colorKey ?: defaultMedicineColorKey(medicine.id))
+}
+
+@Composable
+fun medicineAccentForOption(key: String): MedicineAccent {
+    val dark = isSystemInDarkTheme()
+    parseMedicineColorHex(key)?.let { rgb ->
+        return customMedicineAccent(Color(rgb.red, rgb.green, rgb.blue), dark)
+    }
+    val fallback = MedicineColorOptions.first()
+    val option = MedicineColorOptions.firstOrNull { it.key == key } ?: fallback
+    return if (dark) option.dark else option.light
+}
+
+fun defaultMedicineColorKey(id: Long): String {
+    val index = ((id % MedicineColorOptions.size) + MedicineColorOptions.size) % MedicineColorOptions.size
+    return MedicineColorOptions[index.toInt()].key
+}
+
+fun defaultMedicineColorHex(id: Long): String =
+    medicineColorValueToHex(defaultMedicineColorKey(id))
+
+fun medicineColorValueToHex(value: String): String {
+    normalizeMedicineColorHex(value)?.let { return it }
+    val option = MedicineColorOptions.firstOrNull { it.key == value } ?: MedicineColorOptions.first()
+    return option.light.solid.toHex()
+}
+
+fun medicineColorHex(red: Int, green: Int, blue: Int): String =
+    "#%02X%02X%02X".format(
+        Locale.ROOT,
+        red.coerceIn(0, 255),
+        green.coerceIn(0, 255),
+        blue.coerceIn(0, 255)
+    )
+
+fun normalizeMedicineColorHex(value: String): String? {
+    val hex = value.trim().removePrefix("#")
+    if (!Regex("^[0-9A-Fa-f]{6}$").matches(hex)) return null
+    return "#${hex.uppercase(Locale.ROOT)}"
+}
+
+fun parseMedicineColorHex(value: String): MedicineRgb? {
+    val hex = normalizeMedicineColorHex(value)?.removePrefix("#") ?: return null
+    return MedicineRgb(
+        red = hex.substring(0, 2).toInt(16),
+        green = hex.substring(2, 4).toInt(16),
+        blue = hex.substring(4, 6).toInt(16)
+    )
+}
+
+private fun Color.toHex(): String =
+    medicineColorHex((red * 255).toInt(), (green * 255).toInt(), (blue * 255).toInt())
+
+private fun customMedicineAccent(base: Color, dark: Boolean): MedicineAccent {
+    val solid = when {
+        dark && base.luminance() < 0.35f -> blend(base, Color.White, 0.35f)
+        !dark && base.luminance() > 0.55f -> blend(base, Color.Black, 0.28f)
+        else -> base
+    }
+    val container = if (dark) blend(base, Color.Black, 0.55f) else blend(base, Color.White, 0.78f)
+    val onContainer = if (container.luminance() > 0.5f) Color(0xFF101414) else Color.White
+    return MedicineAccent(solid = solid, container = container, onContainer = onContainer)
+}
+
+private fun blend(from: Color, to: Color, fraction: Float): Color {
+    val clamped = fraction.coerceIn(0f, 1f)
+    return Color(
+        red = from.red + (to.red - from.red) * clamped,
+        green = from.green + (to.green - from.green) * clamped,
+        blue = from.blue + (to.blue - from.blue) * clamped,
+        alpha = 1f
+    )
 }

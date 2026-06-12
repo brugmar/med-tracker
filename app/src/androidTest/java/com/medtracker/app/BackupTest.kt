@@ -34,8 +34,21 @@ class BackupTest {
     }
 
     @Test
-    fun legacyBackupWithoutDailyMaxDecodesToNull() {
-        // A version-1 backup written before the daily-max field existed.
+    fun colorSurvivesRoundTrip() {
+        val withColor = Medicine(
+            id = 1, name = "Ibuprofen", defaultAmount = 200.0, unit = "mg", colorKey = "#2A7FFF"
+        )
+        val withoutColor = Medicine(id = 2, name = "Vitamin D", defaultAmount = 1.0, unit = "tablet")
+
+        val decoded = roundTripMedicines(listOf(withColor, withoutColor))
+
+        assertEquals("#2A7FFF", decoded.getValue(1).colorKey)
+        assertNull(decoded.getValue(2).colorKey)
+    }
+
+    @Test
+    fun legacyBackupWithoutDailyMaxOrColorDecodesToNulls() {
+        // A version-1 backup written before the daily-max and color fields existed.
         val json = """
             {
               "format": "com.medtracker.app.backup",
@@ -47,7 +60,9 @@ class BackupTest {
             }
         """.trimIndent()
 
-        assertNull(decodeBackup(json).medicines.single().dailyMaxAmount)
+        val medicine = decodeBackup(json).medicines.single()
+        assertNull(medicine.dailyMaxAmount)
+        assertNull(medicine.colorKey)
     }
 
     @Test

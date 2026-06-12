@@ -7,14 +7,14 @@ A small Android app to track medicine intake.
   taken today and the number of doses.
 - **Stats tab** — pick a medicine and a day to see the total and every single dose that day
   (entries can be corrected or deleted if logged by mistake), plus bar charts for the last 7 and last 30 days.
-  From here you can also save a printable, black-and-white **PDF report** for a chosen number
-  of days (default 30, current day excluded — quick presets 7/30/90 or any value up to 366):
-  a summary with charts, then week-by-week sections with a bar chart, sum and per-day average,
-  and a day-by-day dose table.
 - **Medicines tab** — add, edit, or delete medicines. A medicine has a name, a default
-  dose amount, a unit (mg, tablet, ml, …), and three quick-dose buttons shown while
-  logging a dose. It can also export/import a JSON backup through Android's document
-  picker, including Google Drive when available. Deleting a medicine keeps its history.
+  dose amount, a unit (mg, tablet, ml, …), a custom color, and three quick-dose buttons shown
+  while logging a dose. Colors can be picked from pastel presets or set with hex/RGB controls.
+  It can also save a printable, black-and-white **PDF report** for a chosen number of days
+  (default 30, current day excluded — quick presets 7/30/90 or any
+  value up to 366): a summary with charts, then week-by-week sections with a bar chart,
+  sum and per-day average, and a day-by-day dose table. Backup export/import uses Android's
+  document picker, including Google Drive when available. Deleting a medicine keeps its history.
 
 Data is stored locally on the phone in an SQLite database (Room). No internet, no accounts.
 
@@ -33,12 +33,12 @@ app/src/main/java/com/medtracker/app/
 │   ├── Models.kt            # Medicine & DoseLog entities, formatting helpers
 │   └── AppDatabase.kt       # Room DAO + database
 ├── report/
-│   ├── ReportData.kt        # 30-day report model: weeks, sums, averages
+│   ├── ReportData.kt        # report model: weeks, sums, averages
 │   └── ReportPdf.kt         # printable B/W PDF renderer (PdfDocument)
 └── ui/
     ├── AppScaffold.kt       # bottom navigation (Today / Stats / Medicines)
     ├── MainScreen.kt        # medicine buttons + "take dose" dialog
-    ├── MedicinesScreen.kt   # manage medicines
+    ├── MedicinesScreen.kt   # manage medicines, backups, reports
     ├── StatsScreen.kt       # per-day view + week/month charts
     ├── BarChart.kt          # dependency-free Canvas bar chart
     └── theme/Theme.kt

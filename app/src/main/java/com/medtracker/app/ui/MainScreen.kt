@@ -191,7 +191,7 @@ private fun TodayProgressCard(medicines: List<Medicine>, stats: Map<Long, TodayS
 
 @Composable
 private fun MedicineCard(medicine: Medicine, todayStat: TodayStat?, onClick: () -> Unit) {
-    val accent = medicineAccent(medicine.id)
+    val accent = medicineAccent(medicine)
     val max = medicine.dailyMaxAmount
     // Soft ceiling: flip the whole card to the error palette once the day goes over.
     val overMax = max != null && todayStat != null && todayStat.total > max
@@ -289,7 +289,7 @@ private fun TakeDoseDialog(
     var amountText by remember(medicine) { mutableStateOf(formatAmount(medicine.defaultAmount)) }
     val amount = parseAmount(amountText)
     val valid = amount != null && amount > 0
-    val accent = medicineAccent(medicine.id)
+    val accent = medicineAccent(medicine)
 
     // Step the amount up or down by one default dose, never below zero.
     val step = medicine.defaultAmount

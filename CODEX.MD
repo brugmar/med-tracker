@@ -209,11 +209,13 @@ Room database:
 
 - Class: `AppDatabase`.
 - File name: `medtracker.db`.
-- Version: `2`.
+- Version: `4`.
 - `exportSchema = false`.
 - Migration `1 -> 2` recreates the `medicines` table with three quick-dose
   preset columns and backfills existing rows as 0.5x, 1x, and 2x their
   `defaultAmount`.
+- Migration `2 -> 3` adds optional `dailyMaxAmount`.
+- Migration `3 -> 4` adds optional `colorKey`.
 
 Entities:
 
@@ -225,7 +227,9 @@ Medicine(
     unit: String,
     presetAmount1: Double = defaultAmount * 0.5,
     presetAmount2: Double = defaultAmount,
-    presetAmount3: Double = defaultAmount * 2
+    presetAmount3: Double = defaultAmount * 2,
+    dailyMaxAmount: Double? = null,
+    colorKey: String? = null
 )
 
 DoseLog(
@@ -251,10 +255,13 @@ Important persistence behavior:
 - Timestamps are epoch milliseconds from `System.currentTimeMillis()`.
 - `Medicine.presetAmounts()` returns the three quick-dose amounts displayed as
   chips in the dose logging dialog.
+- `Medicine.colorKey` stores a user-selected custom color as `#RRGGBB`. Older
+  palette keys such as `teal` or `coral` are still understood. If it is null,
+  the UI falls back to the old stable id-based accent.
 - `Backup.kt` encodes/decodes JSON backups with format
   `com.medtracker.app.backup`, version `1`. Backups include all medicines,
-  quick-dose presets, and all dose logs, including logs for medicines deleted
-  from the active list.
+  quick-dose presets, daily max, chosen color, and all dose logs, including logs
+  for medicines deleted from the active list.
 - Changing database schemas requires incrementing the Room version and adding a
   migration or choosing a deliberate destructive dev-only strategy.
 
@@ -324,8 +331,10 @@ Medicines screen: `ui/MedicinesScreen.kt`
 
 - Uses an inner transparent `Scaffold` with an extended FAB.
 - Empty state if there are no medicines.
-- Add/edit dialog captures name, default dose, unit, and three quick-dose
-  preset amounts.
+- Add/edit dialog captures name, default dose, unit, a custom color, and three
+  quick-dose preset amounts. The medicine form shows a compact color summary;
+  tapping Choose opens a separate color chooser with 8 pastel preset swatches
+  plus hex input and RGB sliders.
 - For new medicines, quick-dose fields auto-fill from the default dose as 0.5x,
   1x, and 2x until the user edits a quick dose.
 - Valid only when name and unit are non-blank and all dose amounts parse to > 0.
@@ -334,8 +343,11 @@ Medicines screen: `ui/MedicinesScreen.kt`
   asks for confirmation, and replaces all local medicines and dose history.
   Google Drive works through the system picker when the Drive app/provider is
   available; there is no direct Google Drive API dependency.
+- Each existing medicine row has a report action. It opens a PDF report dialog
+  with 7/30/90 day presets or any whole number from 1 to 366; the report excludes
+  the current day and saves through Android's Storage Access Framework.
 - Delete dialog warns that prior dose history stays in storage.
-- Existing rows show edit and delete icon buttons.
+- Existing rows show report, edit, and delete icon buttons.
 
 Stats screen: `ui/StatsScreen.kt`
 
@@ -361,6 +373,7 @@ Stats screen: `ui/StatsScreen.kt`
     charts average the previous 29 days.
   - 7-day chart shows values above bars; 30-day chart labels today and every
     fifth day counting backwards.
+- PDF report generation lives in the Medicines tab, not on Stats.
 
 Chart: `ui/BarChart.kt`
 
@@ -392,7 +405,8 @@ Design conventions to preserve:
 
 - Material 3 components.
 - Soft teal brand palette with honey tertiary and per-medicine accent colors.
-- Stable medicine accent chosen by `medicine.id`.
+- User-selected medicine color lives in `medicine.colorKey` as `#RRGGBB`; null
+  falls back to the stable legacy accent chosen by `medicine.id`.
 - Rounded surfaces using `MaterialTheme.shapes.large`.
 - Keep UI offline and task-focused; avoid adding account/network assumptions.
 - Prefer existing private composable style in each screen file.
@@ -407,8 +421,9 @@ Design conventions to preserve:
   Room database.
 - No navigation component exists. Tab switching is local integer state in
   `MedTrackerApp`.
-- Room has one migration, `1 -> 2`, for medicine quick-dose presets. Any future
-  schema change needs explicit migration work.
+- Room migrations currently cover quick-dose presets (`1 -> 2`), daily maximums
+  (`2 -> 3`), and medicine colors (`3 -> 4`). Any future schema change needs
+  explicit migration work.
 - `DoseLog.amount` is `Double`, and display rounds to two decimals. Be careful if
   adding features that require exact fractional arithmetic.
 - Logs for deleted medicines are preserved but not exposed by the current Stats

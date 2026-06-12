@@ -2,8 +2,6 @@
 
 package com.medtracker.app.ui
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -35,7 +33,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -46,13 +43,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -64,23 +58,14 @@ import com.medtracker.app.data.formatAmount
 import com.medtracker.app.data.parseTime
 import com.medtracker.app.data.toLocalDate
 import com.medtracker.app.data.toTimeString
-import com.medtracker.app.report.DEFAULT_REPORT_DAYS
-import com.medtracker.app.report.MAX_REPORT_DAYS
-import com.medtracker.app.report.MIN_REPORT_DAYS
-import com.medtracker.app.report.renderMedicineReportPdf
 import com.medtracker.app.ui.theme.MedicineAccent
 import com.medtracker.app.ui.theme.medicineAccent
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 @Composable
-fun StatsScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+fun StatsScreen(viewModel: AppViewModel) {
     val medicines by viewModel.medicines.collectAsState()
     val selectedId by viewModel.statsMedicineId.collectAsState()
     val day by viewModel.statsDay.collectAsState()
@@ -104,33 +89,7 @@ fun StatsScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
     }
 
     val selectedMedicine = medicines.firstOrNull { it.id == selectedId } ?: return
-    val accent = medicineAccent(selectedMedicine.id)
-
-    // User-chosen length of the PDF report; defaults to 30 days, editable below.
-    var reportDaysText by rememberSaveable { mutableStateOf(DEFAULT_REPORT_DAYS.toString()) }
-    val reportDays = reportDaysText.toIntOrNull()
-    val reportDaysValid = reportDays != null && reportDays in MIN_REPORT_DAYS..MAX_REPORT_DAYS
-
-    val reportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/pdf")
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        val days = reportDays ?: DEFAULT_REPORT_DAYS
-        scope.launch {
-            runCatching {
-                val report = viewModel.medicineReportFor(selectedMedicine, days)
-                withContext(Dispatchers.IO) {
-                    context.contentResolver.openOutputStream(uri)?.use { output ->
-                        renderMedicineReportPdf(report, output)
-                    } ?: error("Could not open selected file.")
-                }
-            }.onSuccess {
-                onMessage("Report saved")
-            }.onFailure { error ->
-                onMessage("Report failed: ${error.message?.takeIf { it.isNotBlank() } ?: "Unknown error"}")
-            }
-        }
-    }
+    val accent = medicineAccent(selectedMedicine)
 
     Column(
         modifier = Modifier
@@ -144,7 +103,7 @@ fun StatsScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             medicines.forEach { medicine ->
-                val chipAccent = medicineAccent(medicine.id)
+                val chipAccent = medicineAccent(medicine)
                 FilterChip(
                     selected = medicine.id == selectedId,
                     onClick = { viewModel.selectStatsMedicine(medicine.id) },
@@ -178,100 +137,8 @@ fun StatsScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
 
         ChartCard(title = "Last 7 days", medicine = selectedMedicine, accent = accent, logs = rangeLogs, days = 7)
         ChartCard(title = "Last 30 days", medicine = selectedMedicine, accent = accent, logs = rangeLogs, days = 30)
-        ReportCard(
-            medicine = selectedMedicine,
-            daysText = reportDaysText,
-            daysValid = reportDaysValid,
-            onDaysChange = { input -> reportDaysText = input.filter { it.isDigit() }.take(3) },
-            onSave = {
-                reportLauncher.launch(
-                    reportFileName(selectedMedicine, reportDays ?: DEFAULT_REPORT_DAYS)
-                )
-            }
-        )
         Spacer(Modifier.height(4.dp))
     }
-}
-
-private val REPORT_DAY_PRESETS = listOf(7, 30, 90)
-
-@Composable
-private fun ReportCard(
-    medicine: Medicine,
-    daysText: String,
-    daysValid: Boolean,
-    onDaysChange: (String) -> Unit,
-    onSave: () -> Unit
-) {
-    Surface(
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(Modifier.fillMaxWidth().padding(16.dp)) {
-            Text("Report", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(2.dp))
-            Text(
-                "Printable PDF for ${medicine.name}, ending yesterday — day-by-day doses, " +
-                    "weekly charts, sums and averages. Choose how many days to include.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(14.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                OutlinedTextField(
-                    value = daysText,
-                    onValueChange = onDaysChange,
-                    label = { Text("Days") },
-                    singleLine = true,
-                    isError = !daysValid,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.width(104.dp)
-                )
-                Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    REPORT_DAY_PRESETS.forEach { preset ->
-                        FilterChip(
-                            selected = daysText.toIntOrNull() == preset,
-                            onClick = { onDaysChange(preset.toString()) },
-                            label = { Text("$preset") }
-                        )
-                    }
-                }
-            }
-            if (!daysValid) {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "Enter a whole number of days between $MIN_REPORT_DAYS and $MAX_REPORT_DAYS.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
-            Spacer(Modifier.height(12.dp))
-            OutlinedButton(
-                onClick = onSave,
-                enabled = daysValid,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Save PDF report")
-            }
-        }
-    }
-}
-
-private fun reportFileName(medicine: Medicine, days: Int): String {
-    val slug = medicine.name.lowercase(Locale.ROOT)
-        .replace(Regex("[^a-z0-9]+"), "-")
-        .trim('-')
-        .take(40)
-        .ifEmpty { "medicine" }
-    val date = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE)
-    return "medtracker-report-$slug-${days}d-$date.pdf"
 }
 
 @Composable

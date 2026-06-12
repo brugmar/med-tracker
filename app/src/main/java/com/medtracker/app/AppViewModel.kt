@@ -97,7 +97,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         presetAmount1: Double,
         presetAmount2: Double,
         presetAmount3: Double,
-        dailyMaxAmount: Double?
+        dailyMaxAmount: Double?,
+        colorKey: String?
     ) {
         viewModelScope.launch {
             dao.insertMedicine(
@@ -108,7 +109,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     presetAmount1 = presetAmount1,
                     presetAmount2 = presetAmount2,
                     presetAmount3 = presetAmount3,
-                    dailyMaxAmount = dailyMaxAmount
+                    dailyMaxAmount = dailyMaxAmount,
+                    colorKey = colorKey
                 )
             )
         }

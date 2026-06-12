@@ -28,6 +28,7 @@ fun encodeBackup(medicines: List<Medicine>, doseLogs: List<DoseLog>): String {
                         .put("presetAmount2", medicine.presetAmount2)
                         .put("presetAmount3", medicine.presetAmount3)
                         .apply { medicine.dailyMaxAmount?.let { put("dailyMaxAmount", it) } }
+                        .apply { medicine.colorKey?.let { put("colorKey", it) } }
                 )
             }
         })
@@ -66,7 +67,8 @@ fun decodeBackup(text: String): BackupData {
             presetAmount1 = json.optPreset("presetAmount1", defaultAmount * 0.5),
             presetAmount2 = json.optPreset("presetAmount2", defaultAmount),
             presetAmount3 = json.optPreset("presetAmount3", defaultAmount * 2),
-            dailyMaxAmount = json.optNullableDouble("dailyMaxAmount")
+            dailyMaxAmount = json.optNullableDouble("dailyMaxAmount"),
+            colorKey = json.optNullableString("colorKey")
         )
     }
 
@@ -95,6 +97,9 @@ private fun JSONObject.optPreset(name: String, defaultValue: Double): Double =
 private fun JSONObject.optNullableDouble(name: String): Double? =
     if (has(name) && !isNull(name)) getDouble(name) else null
 
+private fun JSONObject.optNullableString(name: String): String? =
+    if (has(name) && !isNull(name)) getString(name) else null
+
 private fun <T> JSONArray.mapObjects(block: (JSONObject) -> T): List<T> =
     List(length()) { index -> block(getJSONObject(index)) }
 
@@ -115,6 +120,9 @@ private fun validateBackup(medicines: List<Medicine>, doseLogs: List<DoseLog>) {
         }
         medicine.dailyMaxAmount?.let {
             require(it > 0) { "Backup contains an invalid daily maximum." }
+        }
+        medicine.colorKey?.let {
+            require(it.isNotBlank()) { "Backup contains an invalid medicine color." }
         }
     }
     doseLogs.forEach { log ->
