@@ -1,6 +1,5 @@
 package com.medtracker.app.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -163,7 +162,7 @@ fun medicineAccent(medicine: Medicine): MedicineAccent {
 
 @Composable
 fun medicineAccentForOption(key: String): MedicineAccent {
-    val dark = isSystemInDarkTheme()
+    val dark = LocalDarkTheme.current
     parseMedicineColorHex(key)?.let { rgb ->
         return customMedicineAccent(Color(rgb.red, rgb.green, rgb.blue), dark)
     }

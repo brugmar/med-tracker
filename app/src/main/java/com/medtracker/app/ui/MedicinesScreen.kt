@@ -44,6 +44,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -69,6 +72,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.medtracker.app.AppViewModel
+import com.medtracker.app.ThemeMode
 import com.medtracker.app.data.Medicine
 import com.medtracker.app.data.formatAmount
 import com.medtracker.app.data.parseAmount
@@ -96,6 +100,7 @@ fun MedicinesScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val medicines by viewModel.medicines.collectAsState()
+    val themeMode by viewModel.themeMode.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
     var medicineToEdit by remember { mutableStateOf<Medicine?>(null) }
     var medicineToDelete by remember { mutableStateOf<Medicine?>(null) }
@@ -200,7 +205,12 @@ fun MedicinesScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
                 BackupActions(
                     onExport = onExport,
                     onImport = onImport,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp)
+                )
+                AppearanceCard(
+                    themeMode = themeMode,
+                    onThemeModeChange = viewModel::setThemeMode,
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp)
                 )
                 EmptyState(
                     icon = AppIcons.Pill,
@@ -229,6 +239,12 @@ fun MedicinesScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
                 }
                 item(key = "backup") {
                     BackupActions(onExport = onExport, onImport = onImport)
+                }
+                item(key = "appearance") {
+                    AppearanceCard(
+                        themeMode = themeMode,
+                        onThemeModeChange = viewModel::setThemeMode
+                    )
                 }
                 items(medicines, key = { it.id }) { medicine ->
                     DraggableItem(dragState, medicine.id) { isDragging ->
@@ -361,6 +377,39 @@ private val DEFAULT_MEDICINE_COLORS = listOf(
     DefaultColor("Sage", "#3E6837"),
     DefaultColor("Slate", "#4E6472")
 )
+
+@Composable
+private fun AppearanceCard(
+    themeMode: ThemeMode,
+    onThemeModeChange: (ThemeMode) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.fillMaxWidth().padding(14.dp)) {
+            Text(
+                "Appearance",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(10.dp))
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                ThemeMode.entries.forEachIndexed { index, mode ->
+                    SegmentedButton(
+                        selected = themeMode == mode,
+                        onClick = { onThemeModeChange(mode) },
+                        shape = SegmentedButtonDefaults.itemShape(index, ThemeMode.entries.size),
+                        icon = {},
+                        label = { Text(mode.label) }
+                    )
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun BackupActions(

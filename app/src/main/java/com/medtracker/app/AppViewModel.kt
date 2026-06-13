@@ -1,6 +1,7 @@
 package com.medtracker.app
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.medtracker.app.data.AppDatabase
@@ -30,10 +31,30 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 
+/** In-app theme override; SYSTEM follows the device setting. */
+enum class ThemeMode(val key: String, val label: String) {
+    LIGHT("light", "Light"),
+    SYSTEM("system", "System"),
+    DARK("dark", "Dark");
+
+    companion object {
+        fun fromKey(key: String?): ThemeMode =
+            entries.firstOrNull { it.key == key } ?: SYSTEM
+    }
+}
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val dao = AppDatabase.get(application).dao()
+    private val prefs = application.getSharedPreferences("settings", Context.MODE_PRIVATE)
+
+    val themeMode = MutableStateFlow(ThemeMode.fromKey(prefs.getString(KEY_THEME_MODE, null)))
+
+    fun setThemeMode(mode: ThemeMode) {
+        themeMode.value = mode
+        prefs.edit().putString(KEY_THEME_MODE, mode.key).apply()
+    }
 
     // Mutable so drag-reorder can apply the new order synchronously; the database
     // write follows and Room's re-emission then confirms the same order.
@@ -205,5 +226,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         dao.replaceAllData(backup.medicines, backup.doseLogs)
         refreshToday()
+    }
+
+    private companion object {
+        const val KEY_THEME_MODE = "theme_mode"
     }
 }
