@@ -34,6 +34,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -41,8 +44,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -99,6 +104,11 @@ fun StatsScreen(viewModel: AppViewModel) {
             .padding(horizontal = 20.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        Text(
+            "Statistics",
+            style = MaterialTheme.typography.headlineMedium,
+            modifier = Modifier.padding(top = 8.dp)
+        )
         Row(
             modifier = Modifier.horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -136,8 +146,14 @@ fun StatsScreen(viewModel: AppViewModel) {
             onUpdateLog = viewModel::updateLog
         )
 
-        ChartCard(title = "Last 7 days", medicine = selectedMedicine, accent = accent, logs = rangeLogs, days = 7)
-        ChartCard(title = "Last 30 days", medicine = selectedMedicine, accent = accent, logs = rangeLogs, days = 30)
+        var chartDays by rememberSaveable { mutableIntStateOf(7) }
+        ChartCard(
+            medicine = selectedMedicine,
+            accent = accent,
+            logs = rangeLogs,
+            days = chartDays,
+            onDaysChange = { chartDays = it }
+        )
         Spacer(Modifier.height(4.dp))
     }
 }
@@ -366,13 +382,15 @@ private fun EditLogTimeDialog(
     )
 }
 
+private val CHART_RANGES = listOf(7, 30)
+
 @Composable
 private fun ChartCard(
-    title: String,
     medicine: Medicine,
     accent: MedicineAccent,
     logs: List<DoseLog>,
-    days: Int
+    days: Int,
+    onDaysChange: (Int) -> Unit
 ) {
     val today = LocalDate.now()
     val dailyTotals = remember(logs) {
@@ -394,8 +412,25 @@ private fun ChartCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(2.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Last $days days",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f)
+                )
+                SingleChoiceSegmentedButtonRow {
+                    CHART_RANGES.forEachIndexed { index, range ->
+                        SegmentedButton(
+                            selected = days == range,
+                            onClick = { onDaysChange(range) },
+                            shape = SegmentedButtonDefaults.itemShape(index, CHART_RANGES.size),
+                            icon = {},
+                            label = { Text("${range}d") }
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(6.dp))
             Text(
                 buildString {
                     append("Total ${formatAmount(total)} ${medicine.unit} · avg excl. today ")

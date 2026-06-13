@@ -44,6 +44,62 @@ object AppIcons {
         }.build()
     }
 
+    /** Arrow rising out of a tray — share/export. */
+    val Export: ImageVector by lazy {
+        trayArrowIcon(name = "Export", arrowUp = true)
+    }
+
+    /** Arrow dropping into a tray — restore/import. */
+    val Import: ImageVector by lazy {
+        trayArrowIcon(name = "Import", arrowUp = false)
+    }
+
+    private fun trayArrowIcon(name: String, arrowUp: Boolean): ImageVector =
+        ImageVector.Builder(
+            name = name,
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Tray.
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = StrokeCap.Round
+            ) {
+                moveTo(4.5f, 15f)
+                lineTo(4.5f, 18.5f)
+                lineTo(19.5f, 18.5f)
+                lineTo(19.5f, 15f)
+            }
+            // Arrow shaft.
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = StrokeCap.Round
+            ) {
+                moveTo(12f, 4f)
+                lineTo(12f, 14f)
+            }
+            // Arrow head, pointing up (export) or down (import).
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = StrokeCap.Round
+            ) {
+                if (arrowUp) {
+                    moveTo(8.5f, 7.5f)
+                    lineTo(12f, 4f)
+                    lineTo(15.5f, 7.5f)
+                } else {
+                    moveTo(8.5f, 10.5f)
+                    lineTo(12f, 14f)
+                    lineTo(15.5f, 10.5f)
+                }
+            }
+        }.build()
+
     /** Three rounded bars of varying height. */
     val Chart: ImageVector by lazy {
         ImageVector.Builder(

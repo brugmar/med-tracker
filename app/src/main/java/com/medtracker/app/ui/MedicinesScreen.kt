@@ -35,6 +35,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -190,10 +191,15 @@ fun MedicinesScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
     ) { padding ->
         if (medicines.isEmpty()) {
             Column(Modifier.fillMaxSize().padding(padding)) {
+                Text(
+                    "Medicines",
+                    style = MaterialTheme.typography.headlineMedium,
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp)
+                )
                 BackupActions(
                     onExport = onExport,
                     onImport = onImport,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
                 )
                 EmptyState(
                     icon = AppIcons.Pill,
@@ -208,6 +214,13 @@ fun MedicinesScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
                 contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                item(key = "title") {
+                    Text(
+                        "Medicines",
+                        style = MaterialTheme.typography.headlineMedium,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
                 item(key = "backup") {
                     BackupActions(onExport = onExport, onImport = onImport)
                 }
@@ -355,17 +368,21 @@ private fun BackupActions(
             )
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(
+                FilledTonalButton(
                     onClick = onExport,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Export data")
+                    Icon(AppIcons.Export, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Export")
                 }
-                OutlinedButton(
+                FilledTonalButton(
                     onClick = onImport,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Import data")
+                    Icon(AppIcons.Import, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Import")
                 }
             }
         }
