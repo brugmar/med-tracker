@@ -125,4 +125,38 @@ object AppIcons {
             }
         }.build()
     }
+
+    /** Three slider tracks with offset handles — the settings/adjust mark. */
+    val Settings: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Settings",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Horizontal tracks.
+            listOf(7f, 12f, 17f).forEach { y ->
+                path(
+                    stroke = SolidColor(Color.Black),
+                    strokeLineWidth = 1.8f,
+                    strokeLineCap = StrokeCap.Round
+                ) {
+                    moveTo(4f, y)
+                    lineTo(20f, y)
+                }
+            }
+            // Handles riding the tracks, alternating sides; a filled disc reads
+            // as a slider thumb where it sits on the line.
+            listOf(15f to 7f, 9f to 12f, 15f to 17f).forEach { (cx, cy) ->
+                val r = 2.6f
+                path(fill = SolidColor(Color.Black)) {
+                    moveTo(cx - r, cy)
+                    arcTo(r, r, 0f, isMoreThanHalf = false, isPositiveArc = true, x1 = cx + r, y1 = cy)
+                    arcTo(r, r, 0f, isMoreThanHalf = false, isPositiveArc = true, x1 = cx - r, y1 = cy)
+                    close()
+                }
+            }
+        }.build()
+    }
 }

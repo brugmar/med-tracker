@@ -59,8 +59,8 @@ fun MedTrackerApp(viewModel: AppViewModel) {
                 NavigationBarItem(
                     selected = tab == 2,
                     onClick = { tab = 2 },
-                    icon = { Icon(AppIcons.Pill, contentDescription = null) },
-                    label = { Text("Medicines") }
+                    icon = { Icon(AppIcons.Settings, contentDescription = null) },
+                    label = { Text("Settings") }
                 )
             }
         }

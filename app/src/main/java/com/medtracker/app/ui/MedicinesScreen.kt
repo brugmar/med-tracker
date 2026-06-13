@@ -198,18 +198,18 @@ fun MedicinesScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
         if (medicines.isEmpty()) {
             Column(Modifier.fillMaxSize().padding(padding)) {
                 Text(
-                    "Medicines",
+                    "Settings",
                     style = MaterialTheme.typography.headlineMedium,
                     modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp)
-                )
-                BackupActions(
-                    onExport = onExport,
-                    onImport = onImport,
-                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp)
                 )
                 AppearanceCard(
                     themeMode = themeMode,
                     onThemeModeChange = viewModel::setThemeMode,
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp)
+                )
+                BackupActions(
+                    onExport = onExport,
+                    onImport = onImport,
                     modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp)
                 )
                 EmptyState(
@@ -232,19 +232,37 @@ fun MedicinesScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
             ) {
                 item(key = "title") {
                     Text(
-                        "Medicines",
+                        "Settings",
                         style = MaterialTheme.typography.headlineMedium,
                         modifier = Modifier.padding(top = 8.dp)
                     )
-                }
-                item(key = "backup") {
-                    BackupActions(onExport = onExport, onImport = onImport)
                 }
                 item(key = "appearance") {
                     AppearanceCard(
                         themeMode = themeMode,
                         onThemeModeChange = viewModel::setThemeMode
                     )
+                }
+                item(key = "backup") {
+                    BackupActions(onExport = onExport, onImport = onImport)
+                }
+                item(key = "medsHeader") {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 8.dp)
+                    ) {
+                        Text(
+                            "Medicines",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            "Hold & drag to reorder",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
                 }
                 items(medicines, key = { it.id }) { medicine ->
                     DraggableItem(dragState, medicine.id) { isDragging ->
