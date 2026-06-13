@@ -24,7 +24,10 @@ data class Medicine(
     val dailyMaxAmount: Double? = null,
     // Optional custom color chosen by the user, stored as #RRGGBB. Null keeps
     // the old stable id-based accent assignment for existing medicines.
-    val colorKey: String? = null
+    val colorKey: String? = null,
+    // User-defined list position (0-based); medicines are shown in this order
+    // on every tab. New medicines go to the end.
+    val sortOrder: Int = 0
 )
 
 @Entity(tableName = "dose_logs")

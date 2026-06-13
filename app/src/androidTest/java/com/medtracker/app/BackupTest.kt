@@ -47,6 +47,36 @@ class BackupTest {
     }
 
     @Test
+    fun sortOrderSurvivesRoundTrip() {
+        val second = Medicine(id = 1, name = "Ibuprofen", defaultAmount = 200.0, unit = "mg", sortOrder = 1)
+        val first = Medicine(id = 2, name = "Vitamin D", defaultAmount = 1.0, unit = "tablet", sortOrder = 0)
+
+        val decoded = roundTripMedicines(listOf(second, first))
+
+        assertEquals(1, decoded.getValue(1).sortOrder)
+        assertEquals(0, decoded.getValue(2).sortOrder)
+    }
+
+    @Test
+    fun legacyBackupWithoutSortOrderFallsBackToArrayPosition() {
+        val json = """
+            {
+              "format": "com.medtracker.app.backup",
+              "version": 1,
+              "medicines": [
+                {"id": 7, "name": "Aspirin", "defaultAmount": 100.0, "unit": "mg"},
+                {"id": 3, "name": "Vitamin D", "defaultAmount": 1.0, "unit": "tablet"}
+              ],
+              "doseLogs": []
+            }
+        """.trimIndent()
+
+        val decoded = decodeBackup(json).medicines.associateBy { it.id }
+        assertEquals(0, decoded.getValue(7).sortOrder)
+        assertEquals(1, decoded.getValue(3).sortOrder)
+    }
+
+    @Test
     fun legacyBackupWithoutDailyMaxOrColorDecodesToNulls() {
         // A version-1 backup written before the daily-max and color fields existed.
         val json = """

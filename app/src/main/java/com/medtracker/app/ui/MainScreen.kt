@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -99,8 +100,13 @@ fun MainScreen(
             }
         )
     } else {
+        val listState = rememberLazyListState()
+        val dragState = rememberDragReorderState(listState) { fromId, toId ->
+            viewModel.moveMedicine(fromId, toId)
+        }
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            state = listState,
+            modifier = Modifier.fillMaxSize().dragReorderContainer(dragState),
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -121,19 +127,32 @@ fun MainScreen(
                 TodayHeroCard(medicines = medicines, stats = todayStats)
             }
             item(key = "sectionLabel") {
-                Text(
-                    "Your medicines",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp, bottom = 0.dp)
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 8.dp)
+                ) {
+                    Text(
+                        "Your medicines",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        "Hold & drag to reorder",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
             }
             items(medicines, key = { it.id }) { medicine ->
-                MedicineCard(
-                    medicine = medicine,
-                    todayStat = todayStats[medicine.id],
-                    onClick = { medicineToLog = medicine }
-                )
+                DraggableItem(dragState, medicine.id) { isDragging ->
+                    MedicineCard(
+                        medicine = medicine,
+                        todayStat = todayStats[medicine.id],
+                        dragging = isDragging,
+                        onClick = { medicineToLog = medicine }
+                    )
+                }
             }
         }
     }
@@ -261,7 +280,12 @@ private fun ProgressRing(progress: Float, complete: Boolean, label: String) {
 }
 
 @Composable
-private fun MedicineCard(medicine: Medicine, todayStat: TodayStat?, onClick: () -> Unit) {
+private fun MedicineCard(
+    medicine: Medicine,
+    todayStat: TodayStat?,
+    onClick: () -> Unit,
+    dragging: Boolean = false
+) {
     val accent = medicineAccent(medicine)
     val max = medicine.dailyMaxAmount
     // Soft ceiling: flip the whole card to the error palette once the day goes over.
@@ -273,6 +297,7 @@ private fun MedicineCard(medicine: Medicine, todayStat: TodayStat?, onClick: () 
         color = if (overMax) MaterialTheme.colorScheme.errorContainer
         else MaterialTheme.colorScheme.surfaceContainerLow,
         border = if (overMax) BorderStroke(1.dp, MaterialTheme.colorScheme.error) else null,
+        shadowElevation = if (dragging) 8.dp else 0.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.fillMaxWidth().padding(14.dp).animateContentSize()) {

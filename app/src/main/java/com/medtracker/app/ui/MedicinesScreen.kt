@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -209,8 +210,13 @@ fun MedicinesScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
                 )
             }
         } else {
+            val listState = rememberLazyListState()
+            val dragState = rememberDragReorderState(listState) { fromId, toId ->
+                viewModel.moveMedicine(fromId, toId)
+            }
             LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                state = listState,
+                modifier = Modifier.fillMaxSize().padding(padding).dragReorderContainer(dragState),
                 contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -225,12 +231,15 @@ fun MedicinesScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
                     BackupActions(onExport = onExport, onImport = onImport)
                 }
                 items(medicines, key = { it.id }) { medicine ->
-                    MedicineRow(
-                        medicine = medicine,
-                        onReport = { medicineToReport = medicine },
-                        onEdit = { medicineToEdit = medicine },
-                        onDelete = { medicineToDelete = medicine }
-                    )
+                    DraggableItem(dragState, medicine.id) { isDragging ->
+                        MedicineRow(
+                            medicine = medicine,
+                            dragging = isDragging,
+                            onReport = { medicineToReport = medicine },
+                            onEdit = { medicineToEdit = medicine },
+                            onDelete = { medicineToDelete = medicine }
+                        )
+                    }
                 }
             }
         }
@@ -338,15 +347,19 @@ private data class ReportRequest(val medicine: Medicine, val days: Int)
 
 private data class DefaultColor(val label: String, val hex: String)
 
+// Mid-tone hues in the same tonal band as the brand accents: pale inputs would
+// wash out once customMedicineAccent derives the solid accent, so the defaults
+// stay dark enough to read as text and chart bars in both modes. Deliberately
+// no red — that's reserved for the over-max warning state.
 private val DEFAULT_MEDICINE_COLORS = listOf(
-    DefaultColor("Pale yellow", "#FEF3C7"),
-    DefaultColor("Peach", "#FED7AA"),
-    DefaultColor("Rose", "#FECDD3"),
-    DefaultColor("Pink", "#FBCFE8"),
-    DefaultColor("Lavender", "#DDD6FE"),
-    DefaultColor("Sky", "#BAE6FD"),
-    DefaultColor("Mint", "#BBF7D0"),
-    DefaultColor("Seafoam", "#A7F3D0")
+    DefaultColor("Teal", "#00696B"),
+    DefaultColor("Ocean", "#2F66A8"),
+    DefaultColor("Lavender", "#6D4EA2"),
+    DefaultColor("Plum", "#8E4585"),
+    DefaultColor("Cocoa", "#7A5544"),
+    DefaultColor("Honey", "#7A5900"),
+    DefaultColor("Sage", "#3E6837"),
+    DefaultColor("Slate", "#4E6472")
 )
 
 @Composable
@@ -394,13 +407,15 @@ private fun MedicineRow(
     medicine: Medicine,
     onReport: () -> Unit,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    dragging: Boolean = false
 ) {
     val accent = medicineAccent(medicine)
 
     Surface(
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shadowElevation = if (dragging) 8.dp else 0.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(

@@ -3,8 +3,10 @@
 package com.medtracker.app.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -109,29 +111,39 @@ fun StatsScreen(viewModel: AppViewModel) {
             style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier.padding(top = 8.dp)
         )
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
+        val chipListState = rememberLazyListState()
+        val chipDragState = rememberDragReorderState(chipListState) { fromId, toId ->
+            viewModel.moveMedicine(fromId, toId)
+        }
+        LazyRow(
+            state = chipListState,
+            modifier = Modifier.dragReorderContainer(chipDragState),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            medicines.forEach { medicine ->
-                val chipAccent = medicineAccent(medicine)
-                FilterChip(
-                    selected = medicine.id == selectedId,
-                    onClick = { viewModel.selectStatsMedicine(medicine.id) },
-                    label = { Text(medicine.name) },
-                    leadingIcon = {
-                        Box(
-                            Modifier
-                                .size(10.dp)
-                                .clip(CircleShape)
-                                .background(chipAccent.solid)
+            items(medicines, key = { it.id }) { medicine ->
+                DraggableItem(chipDragState, medicine.id) { isDragging ->
+                    val chipAccent = medicineAccent(medicine)
+                    FilterChip(
+                        selected = medicine.id == selectedId,
+                        onClick = { viewModel.selectStatsMedicine(medicine.id) },
+                        label = { Text(medicine.name) },
+                        leadingIcon = {
+                            Box(
+                                Modifier
+                                    .size(10.dp)
+                                    .clip(CircleShape)
+                                    .background(chipAccent.solid)
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = chipAccent.container,
+                            selectedLabelColor = chipAccent.onContainer
+                        ),
+                        elevation = FilterChipDefaults.filterChipElevation(
+                            elevation = if (isDragging) 8.dp else 0.dp
                         )
-                    },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = chipAccent.container,
-                        selectedLabelColor = chipAccent.onContainer
                     )
-                )
+                }
             }
         }
 

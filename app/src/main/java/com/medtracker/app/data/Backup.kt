@@ -27,6 +27,7 @@ fun encodeBackup(medicines: List<Medicine>, doseLogs: List<DoseLog>): String {
                         .put("presetAmount1", medicine.presetAmount1)
                         .put("presetAmount2", medicine.presetAmount2)
                         .put("presetAmount3", medicine.presetAmount3)
+                        .put("sortOrder", medicine.sortOrder)
                         .apply { medicine.dailyMaxAmount?.let { put("dailyMaxAmount", it) } }
                         .apply { medicine.colorKey?.let { put("colorKey", it) } }
                 )
@@ -57,7 +58,7 @@ fun decodeBackup(text: String): BackupData {
     val version = root.optInt("version", 0)
     require(version == BACKUP_VERSION) { "Unsupported backup version: $version." }
 
-    val medicines = root.requireArray("medicines").mapObjects { json ->
+    val medicines = root.requireArray("medicines").mapObjectsIndexed { index, json ->
         val defaultAmount = json.getDouble("defaultAmount")
         Medicine(
             id = json.getLong("id"),
@@ -68,7 +69,9 @@ fun decodeBackup(text: String): BackupData {
             presetAmount2 = json.optPreset("presetAmount2", defaultAmount),
             presetAmount3 = json.optPreset("presetAmount3", defaultAmount * 2),
             dailyMaxAmount = json.optNullableDouble("dailyMaxAmount"),
-            colorKey = json.optNullableString("colorKey")
+            colorKey = json.optNullableString("colorKey"),
+            // Backups written before sort orders existed keep their array order.
+            sortOrder = json.optInt("sortOrder", index)
         )
     }
 
@@ -102,6 +105,9 @@ private fun JSONObject.optNullableString(name: String): String? =
 
 private fun <T> JSONArray.mapObjects(block: (JSONObject) -> T): List<T> =
     List(length()) { index -> block(getJSONObject(index)) }
+
+private fun <T> JSONArray.mapObjectsIndexed(block: (Int, JSONObject) -> T): List<T> =
+    List(length()) { index -> block(index, getJSONObject(index)) }
 
 private fun validateBackup(medicines: List<Medicine>, doseLogs: List<DoseLog>) {
     require(medicines.distinctBy { it.id }.size == medicines.size) {

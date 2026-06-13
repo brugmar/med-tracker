@@ -20,6 +20,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -34,8 +35,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val dao = AppDatabase.get(application).dao()
 
-    val medicines: StateFlow<List<Medicine>> = dao.medicines()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    // Mutable so drag-reorder can apply the new order synchronously; the database
+    // write follows and Room's re-emission then confirms the same order.
+    private val _medicines = MutableStateFlow<List<Medicine>>(emptyList())
+    val medicines: StateFlow<List<Medicine>> = _medicines.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            dao.medicines().collect { _medicines.value = it }
+        }
+    }
 
     /** Anchor for "today"; refreshed on resume so an app left open survives midnight. */
     private val today = MutableStateFlow(LocalDate.now())
@@ -101,7 +110,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         colorKey: String?
     ) {
         viewModelScope.launch {
-            dao.insertMedicine(
+            dao.insertMedicineAtEnd(
                 Medicine(
                     name = name.trim(),
                     defaultAmount = defaultAmount,
@@ -114,6 +123,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
             )
         }
+    }
+
+    /**
+     * Moves the medicine [fromId] to the position of [toId] and persists the new
+     * order. Applied to [medicines] immediately so an in-flight drag sees its own
+     * reorders; identifying both ends by id keeps repeated drag events idempotent.
+     */
+    fun moveMedicine(fromId: Long, toId: Long) {
+        val current = _medicines.value
+        val fromIndex = current.indexOfFirst { it.id == fromId }
+        val toIndex = current.indexOfFirst { it.id == toId }
+        if (fromIndex < 0 || toIndex < 0 || fromIndex == toIndex) return
+        val reordered = current.toMutableList()
+            .apply { add(toIndex, removeAt(fromIndex)) }
+            .mapIndexed { index, medicine -> medicine.copy(sortOrder = index) }
+        _medicines.value = reordered
+        viewModelScope.launch { dao.updateMedicines(reordered) }
     }
 
     fun updateMedicine(medicine: Medicine) {

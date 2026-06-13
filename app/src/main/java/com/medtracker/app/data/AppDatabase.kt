@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface MedTrackerDao {
 
-    @Query("SELECT * FROM medicines ORDER BY name COLLATE NOCASE")
+    @Query("SELECT * FROM medicines ORDER BY sortOrder, name COLLATE NOCASE, id")
     fun medicines(): Flow<List<Medicine>>
 
     @Query("SELECT * FROM medicines ORDER BY id")
@@ -26,11 +26,21 @@ interface MedTrackerDao {
     @Insert
     suspend fun insertMedicine(medicine: Medicine): Long
 
+    @Query("SELECT COALESCE(MAX(sortOrder), -1) + 1 FROM medicines")
+    suspend fun nextSortOrder(): Int
+
+    @Transaction
+    suspend fun insertMedicineAtEnd(medicine: Medicine): Long =
+        insertMedicine(medicine.copy(sortOrder = nextSortOrder()))
+
     @Insert
     suspend fun insertMedicines(medicines: List<Medicine>)
 
     @Update
     suspend fun updateMedicine(medicine: Medicine)
+
+    @Update
+    suspend fun updateMedicines(medicines: List<Medicine>)
 
     @Delete
     suspend fun deleteMedicine(medicine: Medicine)
@@ -80,7 +90,7 @@ interface MedTrackerDao {
     }
 }
 
-@Database(entities = [Medicine::class, DoseLog::class], version = 4, exportSchema = false)
+@Database(entities = [Medicine::class, DoseLog::class], version = 5, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun dao(): MedTrackerDao
@@ -96,7 +106,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "medtracker.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                     .also { instance = it }
             }
@@ -154,6 +164,23 @@ abstract class AppDatabase : RoomDatabase() {
         private val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE medicines ADD COLUMN colorKey TEXT")
+            }
+        }
+
+        // Adds the user-defined list position, seeded with the previous display
+        // order (name, case-insensitive) so nothing jumps after the update.
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE medicines ADD COLUMN sortOrder INTEGER NOT NULL DEFAULT 0")
+                db.execSQL(
+                    """
+                    UPDATE medicines SET sortOrder = (
+                        SELECT COUNT(*) FROM medicines AS other
+                        WHERE LOWER(other.name) < LOWER(medicines.name)
+                           OR (LOWER(other.name) = LOWER(medicines.name) AND other.id < medicines.id)
+                    )
+                    """.trimIndent()
+                )
             }
         }
     }
