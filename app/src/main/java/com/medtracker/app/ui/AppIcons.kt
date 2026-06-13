@@ -54,6 +54,28 @@ object AppIcons {
         trayArrowIcon(name = "Import", arrowUp = false)
     }
 
+    /** Two crossing strokes for closing a full-screen view or dialog. */
+    val Close: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Close",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round
+            ) {
+                moveTo(7f, 7f)
+                lineTo(17f, 17f)
+                moveTo(17f, 7f)
+                lineTo(7f, 17f)
+            }
+        }.build()
+    }
+
     private fun trayArrowIcon(name: String, arrowUp: Boolean): ImageVector =
         ImageVector.Builder(
             name = name,

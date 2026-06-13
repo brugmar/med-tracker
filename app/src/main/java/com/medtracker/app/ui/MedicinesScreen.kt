@@ -40,6 +40,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -105,6 +106,8 @@ fun MedicinesScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
     var medicineToEdit by remember { mutableStateOf<Medicine?>(null) }
     var medicineToDelete by remember { mutableStateOf<Medicine?>(null) }
     var medicineToReport by remember { mutableStateOf<Medicine?>(null) }
+    var reportPreview by remember { mutableStateOf<ReportPreviewState?>(null) }
+    var reportPreviewLoading by remember { mutableStateOf(false) }
     var pendingImportText by remember { mutableStateOf<String?>(null) }
     var pendingReportRequest by remember { mutableStateOf<ReportRequest?>(null) }
     var reportDaysText by rememberSaveable { mutableStateOf(DEFAULT_REPORT_DAYS.toString()) }
@@ -317,14 +320,39 @@ fun MedicinesScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
             medicine = medicine,
             daysText = reportDaysText,
             daysValid = reportDaysValid,
+            previewInProgress = reportPreviewLoading,
             onDaysChange = { input -> reportDaysText = input.filter { it.isDigit() }.take(3) },
-            onDismiss = { medicineToReport = null },
+            onDismiss = {
+                if (!reportPreviewLoading) medicineToReport = null
+            },
+            onPreview = {
+                val days = reportDays ?: DEFAULT_REPORT_DAYS
+                reportPreviewLoading = true
+                scope.launch {
+                    runCatching {
+                        viewModel.medicineReportFor(medicine, days)
+                    }.onSuccess { report ->
+                        reportPreview = ReportPreviewState(medicine, report)
+                        medicineToReport = null
+                    }.onFailure { error ->
+                        onMessage("Preview failed: ${error.readableMessage()}")
+                    }
+                    reportPreviewLoading = false
+                }
+            },
             onSave = {
                 val days = reportDays ?: DEFAULT_REPORT_DAYS
                 pendingReportRequest = ReportRequest(medicine, days)
                 medicineToReport = null
                 reportLauncher.launch(reportFileName(medicine, days))
             }
+        )
+    }
+
+    reportPreview?.let { preview ->
+        MedicineReportPreviewDialog(
+            preview = preview,
+            onDismiss = { reportPreview = null }
         )
     }
 
@@ -547,8 +575,10 @@ private fun ReportDialog(
     medicine: Medicine,
     daysText: String,
     daysValid: Boolean,
+    previewInProgress: Boolean,
     onDaysChange: (String) -> Unit,
     onDismiss: () -> Unit,
+    onPreview: () -> Unit,
     onSave: () -> Unit
 ) {
     AlertDialog(
@@ -567,7 +597,7 @@ private fun ReportDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    "PDF for ${medicine.name}, ending yesterday. Includes daily doses, weekly charts, sums and averages.",
+                    "Report for ${medicine.name}, ending yesterday. Preview it in the app or save the same data as a PDF.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -608,13 +638,30 @@ private fun ReportDialog(
                         color = MaterialTheme.colorScheme.error
                     )
                 }
+                if (previewInProgress) {
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                    Text(
+                        "Preparing preview…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         },
         confirmButton = {
-            TextButton(enabled = daysValid, onClick = onSave) { Text("Save PDF") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(
+                    enabled = daysValid && !previewInProgress,
+                    onClick = onPreview
+                ) { Text("Preview") }
+                TextButton(
+                    enabled = daysValid && !previewInProgress,
+                    onClick = onSave
+                ) { Text("Save PDF") }
+            }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(enabled = !previewInProgress, onClick = onDismiss) { Text("Cancel") }
         }
     )
 }
