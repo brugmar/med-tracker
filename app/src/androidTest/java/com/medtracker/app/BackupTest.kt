@@ -34,6 +34,19 @@ class BackupTest {
     }
 
     @Test
+    fun halfLifeSurvivesRoundTrip() {
+        val withHalfLife = Medicine(
+            id = 1, name = "Esogno", defaultAmount = 4.0, unit = "mg", halfLifeHours = 6.0
+        )
+        val withoutHalfLife = Medicine(id = 2, name = "Vitamin D", defaultAmount = 1.0, unit = "tablet")
+
+        val decoded = roundTripMedicines(listOf(withHalfLife, withoutHalfLife))
+
+        assertEquals(6.0, decoded.getValue(1).halfLifeHours!!, 1e-9)
+        assertNull(decoded.getValue(2).halfLifeHours)
+    }
+
+    @Test
     fun colorSurvivesRoundTrip() {
         val withColor = Medicine(
             id = 1, name = "Ibuprofen", defaultAmount = 200.0, unit = "mg", colorKey = "#2A7FFF"
@@ -77,8 +90,8 @@ class BackupTest {
     }
 
     @Test
-    fun legacyBackupWithoutDailyMaxOrColorDecodesToNulls() {
-        // A version-1 backup written before the daily-max and color fields existed.
+    fun legacyBackupWithoutOptionalMedicineFieldsDecodesToNulls() {
+        // A version-1 backup written before the optional medicine fields existed.
         val json = """
             {
               "format": "com.medtracker.app.backup",
@@ -92,6 +105,7 @@ class BackupTest {
 
         val medicine = decodeBackup(json).medicines.single()
         assertNull(medicine.dailyMaxAmount)
+        assertNull(medicine.halfLifeHours)
         assertNull(medicine.colorKey)
     }
 
@@ -103,6 +117,22 @@ class BackupTest {
               "version": 1,
               "medicines": [
                 {"id": 1, "name": "Aspirin", "defaultAmount": 100.0, "unit": "mg", "dailyMaxAmount": 0.0}
+              ],
+              "doseLogs": []
+            }
+        """.trimIndent()
+
+        assertThrows(IllegalArgumentException::class.java) { decodeBackup(json) }
+    }
+
+    @Test
+    fun nonPositiveHalfLifeIsRejected() {
+        val json = """
+            {
+              "format": "com.medtracker.app.backup",
+              "version": 1,
+              "medicines": [
+                {"id": 1, "name": "Esogno", "defaultAmount": 4.0, "unit": "mg", "halfLifeHours": 0.0}
               ],
               "doseLogs": []
             }

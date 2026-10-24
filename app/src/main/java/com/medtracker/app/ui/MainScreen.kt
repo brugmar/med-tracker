@@ -88,6 +88,7 @@ fun MainScreen(
 ) {
     val medicines by viewModel.medicines.collectAsState()
     val todayStats by viewModel.todayStats.collectAsState()
+    val remainingAmounts by viewModel.remainingAmounts.collectAsState()
     var medicineToLog by remember { mutableStateOf<Medicine?>(null) }
 
     if (medicines.isEmpty()) {
@@ -149,6 +150,7 @@ fun MainScreen(
                     MedicineCard(
                         medicine = medicine,
                         todayStat = todayStats[medicine.id],
+                        remainingAmount = remainingAmounts[medicine.id],
                         dragging = isDragging,
                         onClick = { medicineToLog = medicine }
                     )
@@ -283,6 +285,7 @@ private fun ProgressRing(progress: Float, complete: Boolean, label: String) {
 private fun MedicineCard(
     medicine: Medicine,
     todayStat: TodayStat?,
+    remainingAmount: Double?,
     onClick: () -> Unit,
     dragging: Boolean = false
 ) {
@@ -367,6 +370,28 @@ private fun MedicineCard(
                             )
                         }
                     }
+                }
+            }
+            remainingAmount?.takeIf { it.isFinite() }?.let { amount ->
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Approx. remaining in body",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (overMax) MaterialTheme.colorScheme.onErrorContainer
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        "≈ ${formatAmount(amount)} ${medicine.unit}",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = if (overMax) MaterialTheme.colorScheme.error else accent.solid,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
             // Quiet daily-max meter: only when a ceiling is set and something was logged.

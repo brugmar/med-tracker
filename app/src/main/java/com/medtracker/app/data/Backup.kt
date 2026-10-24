@@ -29,6 +29,7 @@ fun encodeBackup(medicines: List<Medicine>, doseLogs: List<DoseLog>): String {
                         .put("presetAmount3", medicine.presetAmount3)
                         .put("sortOrder", medicine.sortOrder)
                         .apply { medicine.dailyMaxAmount?.let { put("dailyMaxAmount", it) } }
+                        .apply { medicine.halfLifeHours?.let { put("halfLifeHours", it) } }
                         .apply { medicine.colorKey?.let { put("colorKey", it) } }
                 )
             }
@@ -69,6 +70,7 @@ fun decodeBackup(text: String): BackupData {
             presetAmount2 = json.optPreset("presetAmount2", defaultAmount),
             presetAmount3 = json.optPreset("presetAmount3", defaultAmount * 2),
             dailyMaxAmount = json.optNullableDouble("dailyMaxAmount"),
+            halfLifeHours = json.optNullableDouble("halfLifeHours"),
             colorKey = json.optNullableString("colorKey"),
             // Backups written before sort orders existed keep their array order.
             sortOrder = json.optInt("sortOrder", index)
@@ -126,6 +128,9 @@ private fun validateBackup(medicines: List<Medicine>, doseLogs: List<DoseLog>) {
         }
         medicine.dailyMaxAmount?.let {
             require(it > 0) { "Backup contains an invalid daily maximum." }
+        }
+        medicine.halfLifeHours?.let {
+            require(it.isFinite() && it > 0) { "Backup contains an invalid medicine half-life." }
         }
         medicine.colorKey?.let {
             require(it.isNotBlank()) { "Backup contains an invalid medicine color." }

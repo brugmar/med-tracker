@@ -27,7 +27,10 @@ data class Medicine(
     val colorKey: String? = null,
     // User-defined list position (0-based); medicines are shown in this order
     // on every tab. New medicines go to the end.
-    val sortOrder: Int = 0
+    val sortOrder: Int = 0,
+    // Optional elimination half-life, expressed in hours. Null means that the
+    // app cannot estimate how much of this medicine remains in the body.
+    val halfLifeHours: Double? = null
 )
 
 @Entity(tableName = "dose_logs")

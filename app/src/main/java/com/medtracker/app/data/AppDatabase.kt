@@ -63,6 +63,9 @@ interface MedTrackerDao {
     @Query("SELECT * FROM dose_logs ORDER BY timestamp ASC, id ASC")
     suspend fun allLogsForBackup(): List<DoseLog>
 
+    @Query("SELECT * FROM dose_logs ORDER BY timestamp ASC, id ASC")
+    fun doseLogs(): Flow<List<DoseLog>>
+
     @Query(
         "SELECT * FROM dose_logs WHERE medicineId = :medicineId " +
             "AND timestamp >= :start AND timestamp < :end ORDER BY timestamp DESC"
@@ -90,7 +93,7 @@ interface MedTrackerDao {
     }
 }
 
-@Database(entities = [Medicine::class, DoseLog::class], version = 5, exportSchema = false)
+@Database(entities = [Medicine::class, DoseLog::class], version = 6, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun dao(): MedTrackerDao
@@ -106,7 +109,13 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "medtracker.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(
+                        MIGRATION_1_2,
+                        MIGRATION_2_3,
+                        MIGRATION_3_4,
+                        MIGRATION_4_5,
+                        MIGRATION_5_6
+                    )
                     .build()
                     .also { instance = it }
             }
@@ -181,6 +190,14 @@ abstract class AppDatabase : RoomDatabase() {
                     )
                     """.trimIndent()
                 )
+            }
+        }
+
+        // Adds the optional elimination half-life in hours. Existing medicines
+        // remain unset until the user configures one.
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE medicines ADD COLUMN halfLifeHours REAL")
             }
         }
     }

@@ -286,8 +286,18 @@ fun MedicinesScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
         MedicineDialog(
             existing = null,
             onDismiss = { showAddDialog = false },
-            onSave = { name, amount, unit, preset1, preset2, preset3, dailyMax, colorKey ->
-                viewModel.addMedicine(name, amount, unit, preset1, preset2, preset3, dailyMax, colorKey)
+            onSave = { name, amount, unit, preset1, preset2, preset3, dailyMax, halfLife, colorKey ->
+                viewModel.addMedicine(
+                    name,
+                    amount,
+                    unit,
+                    preset1,
+                    preset2,
+                    preset3,
+                    dailyMax,
+                    halfLife,
+                    colorKey
+                )
                 showAddDialog = false
             }
         )
@@ -297,7 +307,7 @@ fun MedicinesScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
         MedicineDialog(
             existing = medicine,
             onDismiss = { medicineToEdit = null },
-            onSave = { name, amount, unit, preset1, preset2, preset3, dailyMax, colorKey ->
+            onSave = { name, amount, unit, preset1, preset2, preset3, dailyMax, halfLife, colorKey ->
                 viewModel.updateMedicine(
                     medicine.copy(
                         name = name,
@@ -307,6 +317,7 @@ fun MedicinesScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
                         presetAmount2 = preset2,
                         presetAmount3 = preset3,
                         dailyMaxAmount = dailyMax,
+                        halfLifeHours = halfLife,
                         colorKey = colorKey
                     )
                 )
@@ -533,6 +544,9 @@ private fun MedicineRow(
                         medicine.dailyMaxAmount?.let {
                             append(" · max ${formatAmount(it)} ${medicine.unit}/day")
                         }
+                        medicine.halfLifeHours?.let {
+                            append(" · half-life ${formatAmount(it)} h")
+                        }
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -678,6 +692,7 @@ private fun MedicineDialog(
         presetAmount2: Double,
         presetAmount3: Double,
         dailyMaxAmount: Double?,
+        halfLifeHours: Double?,
         colorKey: String
     ) -> Unit
 ) {
@@ -688,6 +703,9 @@ private fun MedicineDialog(
     var preset2Text by remember { mutableStateOf(existing?.let { formatAmount(it.presetAmount2) } ?: "") }
     var preset3Text by remember { mutableStateOf(existing?.let { formatAmount(it.presetAmount3) } ?: "") }
     var maxText by remember { mutableStateOf(existing?.dailyMaxAmount?.let { formatAmount(it) } ?: "") }
+    var halfLifeText by remember {
+        mutableStateOf(existing?.halfLifeHours?.let { formatAmount(it) } ?: "")
+    }
     var colorText by remember {
         mutableStateOf(existing?.colorKey?.let { medicineColorValueToHex(it) } ?: existing?.let {
             defaultMedicineColorHex(it.id)
@@ -701,13 +719,17 @@ private fun MedicineDialog(
     val preset2 = parseAmount(preset2Text)
     val preset3 = parseAmount(preset3Text)
     val maxAmount = parseAmount(maxText)
+    val halfLife = parseAmount(halfLifeText)
     val presetsValid = listOf(preset1, preset2, preset3).all { it != null && it > 0 }
     // The daily max is optional: blank is fine, but a typed value must be positive.
     val maxValid = maxText.isBlank() || (maxAmount != null && maxAmount > 0)
+    val halfLifeValid = halfLifeText.isBlank() ||
+        (halfLife != null && halfLife.isFinite() && halfLife > 0)
     val normalizedColor = normalizeMedicineColorHex(colorText)
     val dailyMax = maxAmount.takeIf { maxText.isNotBlank() }
+    val halfLifeHours = halfLife.takeIf { halfLifeText.isNotBlank() }
     val valid = name.isNotBlank() && unit.isNotBlank() && amount != null && amount > 0 &&
-        presetsValid && maxValid && normalizedColor != null
+        presetsValid && maxValid && halfLifeValid && normalizedColor != null
 
     LaunchedEffect(amountText) {
         if (!presetsEdited && amount != null && amount > 0) {
@@ -784,6 +806,23 @@ private fun MedicineDialog(
                     color = if (!maxValid) MaterialTheme.colorScheme.error
                     else MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                OutlinedTextField(
+                    value = halfLifeText,
+                    onValueChange = { halfLifeText = it },
+                    label = { Text("Half-life (optional)") },
+                    singleLine = true,
+                    isError = !halfLifeValid,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    suffix = { Text("hours") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    if (!halfLifeValid) "Enter a number above 0, or leave empty for no estimate."
+                    else "Used to estimate the amount remaining in your body; overlapping doses are added.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (!halfLifeValid) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 Text(
                     "Quick doses",
                     style = MaterialTheme.typography.titleSmall,
@@ -831,7 +870,17 @@ private fun MedicineDialog(
             TextButton(
                 enabled = valid,
                 onClick = {
-                    onSave(name.trim(), amount!!, unit.trim(), preset1!!, preset2!!, preset3!!, dailyMax, normalizedColor!!)
+                    onSave(
+                        name.trim(),
+                        amount!!,
+                        unit.trim(),
+                        preset1!!,
+                        preset2!!,
+                        preset3!!,
+                        dailyMax,
+                        halfLifeHours,
+                        normalizedColor!!
+                    )
                 }
             ) { Text("Save") }
         },

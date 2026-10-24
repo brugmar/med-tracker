@@ -8,6 +8,7 @@ import com.medtracker.app.data.AppDatabase
 import com.medtracker.app.data.DoseLog
 import com.medtracker.app.data.Medicine
 import com.medtracker.app.data.TodayStat
+import com.medtracker.app.data.calculateRemainingAmount
 import com.medtracker.app.data.decodeBackup
 import com.medtracker.app.data.encodeBackup
 import com.medtracker.app.data.startMillis
@@ -18,6 +19,7 @@ import com.medtracker.app.report.MedicineReport
 import com.medtracker.app.report.buildMedicineReport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -61,17 +63,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _medicines = MutableStateFlow<List<Medicine>>(emptyList())
     val medicines: StateFlow<List<Medicine>> = _medicines.asStateFlow()
 
+    /** Anchor for "today" and clock for the live remaining-amount estimate. */
+    private val today = MutableStateFlow(LocalDate.now())
+    private val currentTimeMillis = MutableStateFlow(System.currentTimeMillis())
+
     init {
         viewModelScope.launch {
             dao.medicines().collect { _medicines.value = it }
         }
+        viewModelScope.launch {
+            while (true) {
+                delay(REMAINING_AMOUNT_REFRESH_MILLIS)
+                currentTimeMillis.value = System.currentTimeMillis()
+            }
+        }
     }
 
-    /** Anchor for "today"; refreshed on resume so an app left open survives midnight. */
-    private val today = MutableStateFlow(LocalDate.now())
-
+    /** Refreshed on resume so an app left open survives midnight and shows current decay. */
     fun refreshToday() {
         today.value = LocalDate.now()
+        currentTimeMillis.value = System.currentTimeMillis()
     }
 
     /** Per-medicine total amount and dose count for the current day. */
@@ -82,6 +93,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 .mapValues { (_, doses) -> TodayStat(doses.sumOf { it.amount }, doses.size) }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
+    /** Approximate amount currently remaining in the body for configured medicines. */
+    val remainingAmounts: StateFlow<Map<Long, Double>> =
+        combine(medicines, dao.doseLogs(), currentTimeMillis) { medicines, logs, atTimestamp ->
+            val logsByMedicine = logs.groupBy { it.medicineId }
+            medicines.mapNotNull { medicine ->
+                calculateRemainingAmount(
+                    doseLogs = logsByMedicine[medicine.id].orEmpty(),
+                    medicineId = medicine.id,
+                    halfLifeHours = medicine.halfLifeHours,
+                    atTimestamp = atTimestamp
+                )?.let { medicine.id to it }
+            }.toMap()
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     // ---- Statistics tab ----
 
@@ -128,6 +153,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         presetAmount2: Double,
         presetAmount3: Double,
         dailyMaxAmount: Double?,
+        halfLifeHours: Double?,
         colorKey: String?
     ) {
         viewModelScope.launch {
@@ -140,6 +166,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     presetAmount2 = presetAmount2,
                     presetAmount3 = presetAmount3,
                     dailyMaxAmount = dailyMaxAmount,
+                    halfLifeHours = halfLifeHours,
                     colorKey = colorKey
                 )
             )
@@ -173,6 +200,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun logDose(medicine: Medicine, amount: Double) {
         refreshToday()
+        val timestamp = System.currentTimeMillis()
+        currentTimeMillis.value = timestamp
         viewModelScope.launch {
             dao.insertLog(
                 DoseLog(
@@ -180,7 +209,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     medicineName = medicine.name,
                     amount = amount,
                     unit = medicine.unit,
-                    timestamp = System.currentTimeMillis()
+                    timestamp = timestamp
                 )
             )
         }
@@ -230,5 +259,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
         const val KEY_THEME_MODE = "theme_mode"
+        const val REMAINING_AMOUNT_REFRESH_MILLIS = 60_000L
     }
 }

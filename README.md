@@ -4,12 +4,14 @@ A small Android app to track medicine intake.
 
 - **Today tab** — one button (card) per medicine. Tap it, confirm or adjust the dosage,
   and the dose is logged with the current date and time. Each card shows the total amount
-  taken today and the number of doses.
+  taken today and the number of doses. When a half-life is configured, the card also estimates
+  how much medicine remains in the body by combining every logged dose and its elapsed time.
 - **Stats tab** — pick a medicine and a day to see the total and every single dose that day
   (entries can be corrected or deleted if logged by mistake), plus bar charts for the last 7 and last 30 days.
 - **Medicines tab** — add, edit, or delete medicines. A medicine has a name, a default
-  dose amount, a unit (mg, tablet, ml, …), a custom color, and three quick-dose buttons shown
-  while logging a dose. Colors can be picked from pastel presets or set with hex/RGB controls.
+  dose amount, a unit (mg, tablet, ml, …), an optional half-life, a custom color, and three
+  quick-dose buttons shown while logging a dose. Colors can be picked from pastel presets or
+  set with hex/RGB controls.
   It can also save a printable, black-and-white **PDF report** for a chosen number of days
   (default 30, current day excluded — quick presets 7/30/90 or any
   value up to 366): a summary with charts, then week-by-week sections with a bar chart,

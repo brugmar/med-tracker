@@ -209,13 +209,15 @@ Room database:
 
 - Class: `AppDatabase`.
 - File name: `medtracker.db`.
-- Version: `4`.
+- Version: `6`.
 - `exportSchema = false`.
 - Migration `1 -> 2` recreates the `medicines` table with three quick-dose
   preset columns and backfills existing rows as 0.5x, 1x, and 2x their
   `defaultAmount`.
 - Migration `2 -> 3` adds optional `dailyMaxAmount`.
 - Migration `3 -> 4` adds optional `colorKey`.
+- Migration `4 -> 5` adds persistent user-defined medicine ordering.
+- Migration `5 -> 6` adds optional `halfLifeHours`.
 
 Entities:
 
@@ -229,7 +231,9 @@ Medicine(
     presetAmount2: Double = defaultAmount,
     presetAmount3: Double = defaultAmount * 2,
     dailyMaxAmount: Double? = null,
-    colorKey: String? = null
+    colorKey: String? = null,
+    sortOrder: Int = 0,
+    halfLifeHours: Double? = null
 )
 
 DoseLog(
@@ -260,14 +264,15 @@ Important persistence behavior:
   the UI falls back to the old stable id-based accent.
 - `Backup.kt` encodes/decodes JSON backups with format
   `com.medtracker.app.backup`, version `1`. Backups include all medicines,
-  quick-dose presets, daily max, chosen color, and all dose logs, including logs
-  for medicines deleted from the active list.
+  quick-dose presets, daily max, half-life, chosen color, and all dose logs,
+  including logs for medicines deleted from the active list.
 - Changing database schemas requires incrementing the Room version and adding a
   migration or choosing a deliberate destructive dev-only strategy.
 
 DAO queries:
 
-- `medicines()`: all medicines ordered by `name COLLATE NOCASE`.
+- `medicines()`: all medicines ordered by the user's saved order.
+- `doseLogs()`: all dose logs as a reactive flow for remaining-in-body estimates.
 - `logsBetween(start, end)`: all logs in a time range, newest first.
 - `logsForMedicineBetween(medicineId, start, end)`: selected medicine logs in a
   time range, newest first.
@@ -313,6 +318,7 @@ Today screen: `ui/MainScreen.kt`
   - Medicine name.
   - Default dose.
   - Today's total/count if logged today, otherwise an add icon.
+  - Approximate amount remaining in the body when a half-life is configured.
 - Tapping a medicine opens `TakeDoseDialog`.
 - Dose dialog:
   - Starts with the default amount.
@@ -331,8 +337,8 @@ Medicines screen: `ui/MedicinesScreen.kt`
 
 - Uses an inner transparent `Scaffold` with an extended FAB.
 - Empty state if there are no medicines.
-- Add/edit dialog captures name, default dose, unit, a custom color, and three
-  quick-dose preset amounts. The medicine form shows a compact color summary;
+- Add/edit dialog captures name, default dose, unit, optional half-life, a custom color,
+  and three quick-dose preset amounts. The medicine form shows a compact color summary;
   tapping Choose opens a separate color chooser with 8 pastel preset swatches
   plus hex input and RGB sliders.
 - For new medicines, quick-dose fields auto-fill from the default dose as 0.5x,
