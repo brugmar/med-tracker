@@ -8,14 +8,21 @@ private const val BACKUP_VERSION = 1
 
 data class BackupData(
     val medicines: List<Medicine>,
-    val doseLogs: List<DoseLog>
+    val doseLogs: List<DoseLog>,
+    // Null in older backups: importing those preserves the current preference.
+    val nightCycle: NightCycle? = null
 )
 
-fun encodeBackup(medicines: List<Medicine>, doseLogs: List<DoseLog>): String {
+fun encodeBackup(
+    medicines: List<Medicine>,
+    doseLogs: List<DoseLog>,
+    nightCycle: NightCycle = NightCycle()
+): String {
     val root = JSONObject()
         .put("format", BACKUP_FORMAT)
         .put("version", BACKUP_VERSION)
         .put("exportedAt", System.currentTimeMillis())
+        .put("nightStartMinutes", nightCycle.startMinutes)
         .put("medicines", JSONArray().apply {
             medicines.forEach { medicine ->
                 put(
@@ -90,7 +97,10 @@ fun decodeBackup(text: String): BackupData {
     }
 
     validateBackup(medicines, doseLogs)
-    return BackupData(medicines = medicines, doseLogs = doseLogs)
+    val nightCycle = if (root.has("nightStartMinutes")) {
+        NightCycle.fromMinutes(root.getInt("nightStartMinutes"))
+    } else null
+    return BackupData(medicines = medicines, doseLogs = doseLogs, nightCycle = nightCycle)
 }
 
 private fun JSONObject.requireArray(name: String): JSONArray =

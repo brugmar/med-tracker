@@ -41,6 +41,10 @@ import androidx.compose.ui.window.DialogProperties
 import com.medtracker.app.data.DoseLog
 import com.medtracker.app.data.Medicine
 import com.medtracker.app.data.formatAmount
+import com.medtracker.app.data.nightChartLabel
+import com.medtracker.app.data.nightDateLabel
+import com.medtracker.app.data.nightWeekdayLabel
+import com.medtracker.app.data.toLocalDateLabel
 import com.medtracker.app.data.toTimeString
 import com.medtracker.app.report.MedicineReport
 import com.medtracker.app.report.ReportDay
@@ -52,8 +56,6 @@ import java.math.BigDecimal
 import java.math.MathContext
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.time.format.TextStyle as JavaTextStyle
-import java.util.Locale
 import kotlin.math.max
 
 data class ReportPreviewState(
@@ -104,7 +106,7 @@ fun MedicineReportPreviewDialog(
                     item(key = "weeklyTitle") {
                         SectionTitle(
                             title = "Weekly usage",
-                            subtitle = "Each week shows daily totals and the exact dose times recorded."
+                            subtitle = "Each week shows nightly totals and the exact dose times recorded."
                         )
                     }
                     items(preview.report.weeks, key = { week -> week.index }) { week ->
@@ -118,12 +120,12 @@ fun MedicineReportPreviewDialog(
                     if (preview.report.hasForeignUnits) {
                         item(key = "foreignUnits") {
                             ReportNote(
-                                "Some older doses use a different unit. Charts, averages and peak-day values use ${preview.report.unit}; day details keep the unit originally logged."
+                                "Some older doses use a different unit. Charts, averages and peak-night values use ${preview.report.unit}; night details keep the unit originally logged."
                             )
                         }
                     }
                     item(key = "reportDayExcluded") {
-                        ReportNote("The report ends yesterday, so doses taken today are not included.")
+                        ReportNote("The current night is excluded. Each night uses ${preview.report.nightCycle.windowLabel}. Dates identify both sides of the night.")
                     }
                 }
             }
@@ -193,6 +195,11 @@ private fun ReportPreviewHeader(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Text(
+                    report.nightCycle.windowLabel,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 Spacer(Modifier.height(2.dp))
                 Text(
                     "Generated ${report.generatedAt.format(REPORT_GENERATED_AT)}",
@@ -228,19 +235,19 @@ private fun ReportSummaryGrid(report: MedicineReport, accent: MedicineAccent) {
         )
         SummaryTile(
             value = "${formatReportAverage(report.averagePerDay)} ${report.unit}",
-            label = "Average per day",
+            label = "Average per night",
             accent = accent,
             modifier = Modifier.weight(1f)
         )
         SummaryTile(
             value = "${report.daysWithDoses} of ${report.dayCount}",
-            label = "Days with intake",
+            label = "Nights with intake",
             accent = accent,
             modifier = Modifier.weight(1f)
         )
         SummaryTile(
             value = report.peakDay?.let { "${formatAmount(it.primaryTotal)} ${report.unit}" } ?: "None",
-            label = report.peakDay?.let { "Peak day · ${it.date.format(REPORT_DAY_MONTH)}" } ?: "Peak day",
+            label = report.peakDay?.let { "Peak night · ${it.date.nightDateLabel()}" } ?: "Peak night",
             accent = accent,
             modifier = Modifier.weight(1f)
         )
@@ -293,8 +300,8 @@ private fun ReportOverviewCard(
     ) {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
             SectionTitle(
-                title = "Daily totals",
-                subtitle = "Total ${formatUnitTotals(report.totals, report.unit)} · avg ${formatReportAverage(report.averagePerDay)} ${report.unit}/day"
+                title = "Nightly totals",
+                subtitle = "Total ${formatUnitTotals(report.totals, report.unit)} · avg ${formatReportAverage(report.averagePerDay)} ${report.unit}/night"
             )
             Spacer(Modifier.height(14.dp))
             BarChart(
@@ -311,7 +318,7 @@ private fun ReportOverviewCard(
             medicine.dailyMaxAmount?.let { maxAmount ->
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Daily max line: ${formatAmount(maxAmount)} ${medicine.unit}",
+                    "Nightly max line: ${formatAmount(maxAmount)} ${medicine.unit}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -332,20 +339,20 @@ private fun TimeOfDayCard(report: MedicineReport, accent: MedicineAccent) {
     ) {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
             SectionTitle(
-                title = "Time of day",
+                title = "Time within night",
                 subtitle = if (totalCount == 0) "No dose times recorded in this period."
-                else "$totalCount logged dose times grouped into six-hour blocks."
+                else "$totalCount dose times in six-hour blocks from ${report.nightCycle.startLabel}."
             )
             Spacer(Modifier.height(12.dp))
-            TIME_BLOCKS.forEachIndexed { index, block ->
+            report.nightCycle.timeBlockLabels.forEachIndexed { index, range ->
                 TimeOfDayRow(
-                    label = block.label,
-                    range = block.range,
+                    label = "Block ${index + 1}",
+                    range = range,
                     count = report.timeOfDayCounts.getOrElse(index) { 0 },
                     maxCount = maxCount,
                     accent = accent
                 )
-                if (index != TIME_BLOCKS.lastIndex) Spacer(Modifier.height(10.dp))
+                if (index != 3) Spacer(Modifier.height(10.dp))
             }
         }
     }
@@ -440,7 +447,7 @@ private fun ReportWeekCard(
                     modifier = Modifier.weight(1f)
                 )
                 WeekMetric(
-                    label = "Avg/day",
+                    label = "Avg/night",
                     value = "${formatReportAverage(week.averagePerDay)} ${report.unit}",
                     modifier = Modifier.weight(1f)
                 )
@@ -496,7 +503,7 @@ private fun ReportDayUsageRow(day: ReportDay, primaryUnit: String) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                day.date.format(REPORT_WEEKDAY_DAY_MONTH),
+                "${day.date.nightWeekdayLabel()}\n${day.date.nightDateLabel()}",
                 style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.weight(1f)
             )
@@ -515,7 +522,7 @@ private fun ReportDayUsageRow(day: ReportDay, primaryUnit: String) {
         Spacer(Modifier.height(6.dp))
         if (day.doses.isEmpty()) {
             Text(
-                "No medicine taken on this day.",
+                "No medicine taken during this night.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -540,7 +547,7 @@ private fun DoseChip(dose: DoseLog) {
         color = MaterialTheme.colorScheme.surfaceContainerHigh
     ) {
         Text(
-            "${dose.timestamp.toTimeString()} · ${formatAmount(dose.amount)} ${dose.unit}",
+            "${dose.timestamp.toLocalDateLabel()} ${dose.timestamp.toTimeString()} · ${formatAmount(dose.amount)} ${dose.unit}",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
@@ -577,33 +584,17 @@ private fun ReportNote(text: String) {
     )
 }
 
-private data class TimeBlock(val label: String, val range: String)
-
-private val TIME_BLOCKS = listOf(
-    TimeBlock("Night", "00:00-05:59"),
-    TimeBlock("Morning", "06:00-11:59"),
-    TimeBlock("Afternoon", "12:00-17:59"),
-    TimeBlock("Evening", "18:00-23:59")
-)
-
 private val REPORT_DAY_MONTH: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM")
-private val REPORT_DAY_FULL_MONTH: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMMM")
 private val REPORT_FULL_DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMMM yyyy")
 private val REPORT_GENERATED_AT: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm")
-private val REPORT_WEEKDAY_DAY_MONTH: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM")
 
 private fun reportPeriodLine(report: MedicineReport): String {
-    val range = if (report.startDate.year == report.endDate.year) {
-        "${report.startDate.format(REPORT_DAY_FULL_MONTH)} - ${report.endDate.format(REPORT_FULL_DATE)}"
-    } else {
-        "${report.startDate.format(REPORT_FULL_DATE)} - ${report.endDate.format(REPORT_FULL_DATE)}"
-    }
-    return "$range · ${report.dayCount} days"
+    return "${report.startDate.nightDateLabel()} - ${report.endDate.nightDateLabel()} · ${report.dayCount} nights"
 }
 
 private fun weekRangeLine(week: ReportWeek): String {
     val first = week.days.firstOrNull()?.date ?: week.weekStart
-    val last = week.days.lastOrNull()?.date ?: week.weekStart
+    val last = (week.days.lastOrNull()?.date ?: week.weekStart).plusDays(1)
     return when {
         first == last -> first.format(REPORT_FULL_DATE)
         first.year == last.year && first.month == last.month ->
@@ -626,13 +617,14 @@ private fun overviewLabels(days: List<ReportDay>): List<String> {
         } else {
             val withMonth = day.date.monthValue != labelledMonth
             labelledMonth = day.date.monthValue
-            if (withMonth) day.date.format(REPORT_DAY_MONTH) else day.date.dayOfMonth.toString()
+            if (withMonth) "${day.date.nightChartLabel()} ${day.date.format(DateTimeFormatter.ofPattern("MMM"))}"
+            else day.date.nightChartLabel()
         }
     }
 }
 
 private fun weekdayLabel(date: LocalDate): String =
-    date.dayOfWeek.getDisplayName(JavaTextStyle.NARROW, Locale.getDefault())
+    date.nightWeekdayLabel()
 
 private fun unitTotals(doses: List<DoseLog>): Map<String, Double> =
     doses.groupBy { it.unit }.mapValues { (_, unitDoses) -> unitDoses.sumOf { it.amount } }

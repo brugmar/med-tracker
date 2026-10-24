@@ -7,6 +7,10 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import com.medtracker.app.data.formatAmount
+import com.medtracker.app.data.nightChartLabel
+import com.medtracker.app.data.nightDateLabel
+import com.medtracker.app.data.nightWeekdayLabel
+import com.medtracker.app.data.toLocalDateLabel
 import com.medtracker.app.data.toTimeString
 import java.io.OutputStream
 import java.time.DayOfWeek
@@ -49,8 +53,6 @@ private val SANS_ITALIC: Typeface = Typeface.create(Typeface.SANS_SERIF, Typefac
 
 private val DAY_MONTH: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM")
 private val WEEKDAY_DAY_MONTH: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM")
-private val DAY_FULL_MONTH: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMMM")
-private val FULL_DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMMM yyyy")
 private val GENERATED_AT: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMMM yyyy, HH:mm")
 
 private fun textPaint(
@@ -207,10 +209,10 @@ private class ReportPdfRenderer(private val report: MedicineReport) {
         addSectionCaption("SUMMARY")
         addSummaryTiles()
         composer.spacer(14f)
-        addSectionCaption("DAILY TOTALS — FULL PERIOD (${report.unit})")
+        addSectionCaption("NIGHTLY TOTALS — FULL PERIOD (${report.unit})")
         addOverviewChart()
         composer.spacer(14f)
-        addSectionCaption("TIME OF DAY")
+        addSectionCaption("TIME WITHIN NIGHT — SIX-HOUR BLOCKS")
         addTimeOfDay()
         composer.spacer(20f)
         report.weeks.forEach { addWeekSection(it) }
@@ -221,31 +223,29 @@ private class ReportPdfRenderer(private val report: MedicineReport) {
         val medicineTitle = fitted(
             textPaint(25f, INK, SANS_BOLD), report.medicineName, CONTENT_WIDTH, 13f
         )
-        composer.add(84f) { canvas, top ->
+        composer.add(98f) { canvas, top ->
             canvas.drawText(
-                "MEDICINE REPORT · LAST ${report.dayCount} DAYS",
+                "MEDICINE REPORT · LAST ${report.dayCount} NIGHTS",
                 MARGIN, top + 9f,
                 textPaint(8f, INK_SOFT, SANS_MEDIUM, letterSpacing = 0.18f)
             )
             canvas.drawText(report.medicineName, MARGIN, top + 38f, medicineTitle)
-            canvas.drawText(periodLine(), MARGIN, top + 55f, textPaint(10.5f, INK_SOFT))
+            val period = periodLine()
+            canvas.drawText(period, MARGIN, top + 55f, fitted(textPaint(10.5f, INK_SOFT), period, CONTENT_WIDTH, 8f))
+            canvas.drawText(
+                "Night window: ${report.nightCycle.windowLabel} · current night excluded",
+                MARGIN, top + 69f, textPaint(8f, INK_SOFT)
+            )
             canvas.drawText(
                 "Generated on ${report.generatedAt.format(GENERATED_AT)} · MedTracker",
-                MARGIN, top + 69f, textPaint(8f, INK_FAINT)
+                MARGIN, top + 83f, textPaint(8f, INK_FAINT)
             )
-            canvas.drawLine(MARGIN, top + 80f, CONTENT_RIGHT, top + 80f, rule)
+            canvas.drawLine(MARGIN, top + 94f, CONTENT_RIGHT, top + 94f, rule)
         }
     }
 
     private fun periodLine(): String {
-        val start = report.startDate
-        val end = report.endDate
-        val range = if (start.year == end.year) {
-            "${start.format(DAY_FULL_MONTH)} – ${end.format(FULL_DATE)}"
-        } else {
-            "${start.format(FULL_DATE)} – ${end.format(FULL_DATE)}"
-        }
-        return "$range · ${report.dayCount} days, report day not included"
+        return "${report.startDate.nightDateLabel()} – ${report.endDate.nightDateLabel()} · ${report.dayCount} nights"
     }
 
     private fun addSectionCaption(text: String) {
@@ -266,15 +266,15 @@ private class ReportPdfRenderer(private val report: MedicineReport) {
         val tiles = listOf(
             Tile(formatUnitTotals(report.totals, report.unit), "TOTAL TAKEN"),
             Tile(report.doseCount.toString(), if (report.doseCount == 1) "DOSE" else "DOSES"),
-            Tile("${formatAverage(report.averagePerDay)} ${report.unit}", "AVG PER DAY"),
-            Tile("${report.daysWithDoses} of ${report.dayCount}", "DAYS WITH INTAKE"),
+            Tile("${formatAverage(report.averagePerDay)} ${report.unit}", "AVG PER NIGHT"),
+            Tile("${report.daysWithDoses} of ${report.dayCount}", "NIGHTS WITH INTAKE"),
             if (peak != null) {
                 Tile(
                     "${formatAmount(peak.primaryTotal)} ${report.unit}",
-                    "PEAK · ${peak.date.format(DAY_MONTH).uppercase()}"
+                    "PEAK · ${peak.date.nightChartLabel()} ${peak.date.format(DateTimeFormatter.ofPattern("MMM")).uppercase()}"
                 )
             } else {
-                Tile("—", "PEAK DAY")
+                Tile("—", "PEAK NIGHT")
             }
         )
 
@@ -308,7 +308,8 @@ private class ReportPdfRenderer(private val report: MedicineReport) {
             if (index % step != 0 && !(last && index % step >= 2)) return@mapIndexed ""
             val withMonth = day.date.monthValue != labelledMonth
             labelledMonth = day.date.monthValue
-            if (withMonth) day.date.format(DAY_MONTH) else day.date.dayOfMonth.toString()
+            if (withMonth) "${day.date.nightChartLabel()} ${day.date.format(DateTimeFormatter.ofPattern("MMM"))}"
+            else day.date.nightChartLabel()
         }
         addChart(
             height = 118f,
@@ -322,7 +323,7 @@ private class ReportPdfRenderer(private val report: MedicineReport) {
     }
 
     private fun addTimeOfDay() {
-        val buckets = listOf("Night 00–06", "Morning 06–12", "Afternoon 12–18", "Evening 18–24")
+        val buckets = report.nightCycle.timeBlockLabels
         val counts = report.timeOfDayCounts
         val maxCount = max(1, counts.max())
         val barLeft = MARGIN + 96f
@@ -365,9 +366,9 @@ private class ReportPdfRenderer(private val report: MedicineReport) {
 
     private fun weekTitle(week: ReportWeek): String {
         val first = week.days.first().date
-        val last = week.days.last().date
+        val last = week.days.last().date.plusDays(1)
         val range = "${first.format(WEEKDAY_DAY_MONTH)} – ${last.format(WEEKDAY_DAY_MONTH)}"
-        val partial = if (week.isPartial) " · ${week.days.size} DAYS" else ""
+        val partial = if (week.isPartial) " · ${week.days.size} NIGHTS" else ""
         return "WEEK ${week.index} · ${range.uppercase()}$partial"
     }
 
@@ -375,7 +376,7 @@ private class ReportPdfRenderer(private val report: MedicineReport) {
         val title = weekTitle(week) + if (continued) " — CONTINUED" else ""
         val stats = "Sum ${formatUnitTotals(week.totals, report.unit)}   ·   " +
             "${week.doseCount} ${if (week.doseCount == 1) "dose" else "doses"}   ·   " +
-            "Avg ${formatAverage(week.averagePerDay)} ${report.unit}/day"
+            "Avg ${formatAverage(week.averagePerDay)} ${report.unit}/night"
         val titlePaint = textPaint(10f, INK, SANS_BOLD, letterSpacing = 0.04f)
         val titleWidth = titlePaint.measureText(title)
         val statsPaint = fitted(
@@ -393,7 +394,7 @@ private class ReportPdfRenderer(private val report: MedicineReport) {
         val byDate = week.days.associateBy { it.date }
         val dates = (0..6).map { week.weekStart.plusDays(it.toLong()) }
         val values = dates.map { date -> byDate[date]?.primaryTotal }
-        val labels = dates.map { it.format(WEEKDAY_DAY_MONTH) }
+        val labels = dates.map { it.nightWeekdayLabel(java.time.format.TextStyle.NARROW) + " " + it.nightChartLabel() }
         addChart(
             height = 104f,
             values = values,
@@ -489,9 +490,9 @@ private class ReportPdfRenderer(private val report: MedicineReport) {
     private fun addTableHeader() {
         composer.add(15f) { canvas, top ->
             val labels = textPaint(6.4f, INK_FAINT, SANS_MEDIUM, letterSpacing = 0.1f)
-            canvas.drawText("DAY", MARGIN, top + 7f, labels)
+            canvas.drawText("NIGHT", MARGIN, top + 7f, labels)
             canvas.drawText("DOSES — TIME AND AMOUNT", dosesLeft, top + 7f, labels)
-            canvas.textRight("DAY TOTAL", CONTENT_RIGHT, top + 7f, labels)
+            canvas.textRight("NIGHT TOTAL", CONTENT_RIGHT, top + 7f, labels)
             canvas.drawLine(MARGIN, top + 11f, CONTENT_RIGHT, top + 11f, rowLine)
         }
     }
@@ -499,7 +500,7 @@ private class ReportPdfRenderer(private val report: MedicineReport) {
     /** A dose as the two text parts of one chip: faint time, solid amount. */
     private fun dayChips(day: ReportDay): List<Pair<String, String>> =
         day.doses.map { dose ->
-            dose.timestamp.toTimeString() to "${formatAmount(dose.amount)} ${dose.unit}"
+            "${dose.timestamp.toLocalDateLabel()} ${dose.timestamp.toTimeString()}" to "${formatAmount(dose.amount)} ${dose.unit}"
         }
 
     private fun chipWidth(chip: Pair<String, String>): Float =
@@ -526,7 +527,7 @@ private class ReportPdfRenderer(private val report: MedicineReport) {
     }
 
     private fun dayRowHeight(day: ReportDay): Float =
-        max(1, chipLines(day).size) * doseLineHeight + 8f
+        max(2, chipLines(day).size) * doseLineHeight + 8f
 
     private fun addDayRow(day: ReportDay, rowHeight: Float) {
         val lines = chipLines(day)
@@ -538,12 +539,12 @@ private class ReportPdfRenderer(private val report: MedicineReport) {
             }
             val baselineY = top + 13f
 
-            val weekday = day.date.format(DateTimeFormatter.ofPattern("EEE"))
+            val weekday = day.date.nightWeekdayLabel()
             val weekdayPaint = textPaint(9f, INK, SANS_MEDIUM)
             canvas.drawText(weekday, MARGIN, baselineY, weekdayPaint)
             canvas.drawText(
-                day.date.format(DAY_MONTH),
-                MARGIN + weekdayPaint.measureText(weekday) + 5f, baselineY, bodySoft
+                "${day.date.format(DAY_MONTH)}/${day.date.plusDays(1).format(DAY_MONTH)}",
+                MARGIN, baselineY + doseLineHeight, bodySoft
             )
 
             if (lines.isEmpty()) {
@@ -574,16 +575,15 @@ private class ReportPdfRenderer(private val report: MedicineReport) {
     private fun addFootnotes() {
         val notes = buildList {
             add(
-                "Week averages are per day, over the days each week contributes to the period" +
-                    " — the first and last week may cover fewer than 7 days."
+                "Week averages use the included nights; the first and last week may cover fewer than 7 nights."
             )
             if (report.hasForeignUnits) {
                 add(
-                    "Doses recorded in a different unit are listed in the day rows but are" +
-                        " not included in totals, averages or charts (${report.unit} only)."
+                    "Charts and averages use ${report.unit}; historical units remain in night rows and unit totals."
                 )
             }
-            add("Shaded rows are weekends. Times are local to the device at logging time.")
+            add("Night labels show start/end dates. Weeks and shaded weekends follow the night start date.")
+            add("Dose dates and times use the device's current time zone.")
             add("Generated by MedTracker — a personal intake log, not medical advice.")
         }
         val lineHeight = 9.5f
@@ -604,7 +604,7 @@ private class ReportPdfRenderer(private val report: MedicineReport) {
         val textY = y + 11f
         canvas.drawText(
             "${report.medicineName} — ${report.startDate.format(DAY_MONTH)} to " +
-                "${report.endDate.format(DAY_MONTH)} ${report.endDate.year}",
+                "${report.endDate.plusDays(1).format(DAY_MONTH)} ${report.endDate.plusDays(1).year}",
             MARGIN, textY, footerPaint
         )
         canvas.textCenter("MedTracker", (MARGIN + CONTENT_RIGHT) / 2f, textY, footerPaint)

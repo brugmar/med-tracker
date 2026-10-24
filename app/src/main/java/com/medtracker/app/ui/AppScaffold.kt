@@ -48,7 +48,7 @@ fun MedTrackerApp(viewModel: AppViewModel) {
                             contentDescription = null
                         )
                     },
-                    label = { Text("Today") }
+                    label = { Text("Night") }
                 )
                 NavigationBarItem(
                     selected = tab == 1,

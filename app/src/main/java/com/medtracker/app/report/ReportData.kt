@@ -2,34 +2,32 @@ package com.medtracker.app.report
 
 import com.medtracker.app.data.DoseLog
 import com.medtracker.app.data.Medicine
+import com.medtracker.app.data.NightCycle
 import com.medtracker.app.data.formatAmount
-import com.medtracker.app.data.toLocalDate
 import java.time.DayOfWeek
-import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
-import java.time.ZoneId
 import java.time.temporal.TemporalAdjusters
 
-/** Default report span: the 30 days before — and not including — the report day. */
+/** Default report span: the 30 completed nights before the current night. */
 const val DEFAULT_REPORT_DAYS = 30
 
 /** Bounds on a user-chosen report span, to keep the PDF a sane size. */
 const val MIN_REPORT_DAYS = 1
 const val MAX_REPORT_DAYS = 366
 
-/** One calendar day of the report; [doses] are chronological and may be empty. */
+/** One night, keyed by its start date; [doses] are chronological and may be empty. */
 class ReportDay(
     val date: LocalDate,
     val doses: List<DoseLog>,
     primaryUnit: String
 ) {
-    /** Amount taken this day in the report's primary unit. */
+    /** Amount taken this night in the report's primary unit. */
     val primaryTotal: Double = doses.filter { it.unit == primaryUnit }.sumOf { it.amount }
     val hasForeignUnits: Boolean = doses.any { it.unit != primaryUnit }
 }
 
-/** A calendar week (Monday–Sunday) clipped to the report window. */
+/** A week of night start dates (Monday–Sunday), clipped to the report window. */
 class ReportWeek(
     val index: Int,
     /** The week's Monday; can precede the window start in a partial first week. */
@@ -41,7 +39,7 @@ class ReportWeek(
     val totals: Map<String, Double> = sumByUnit(days.flatMap { it.doses })
     val primaryTotal: Double = totals[primaryUnit] ?: 0.0
 
-    /** Average per day over the days of this week that fall inside the window. */
+    /** Average per night over the nights of this week inside the window. */
     val averagePerDay: Double = if (days.isEmpty()) 0.0 else primaryTotal / days.size
     val isPartial: Boolean = days.size < 7
 }
@@ -49,16 +47,17 @@ class ReportWeek(
 class MedicineReport(
     val medicineName: String,
     /**
-     * Unit used for charts, averages and the peak day. Doses logged in a different
-     * (historical) unit still appear in the day rows but are kept out of those numbers.
+     * Unit used for charts, averages and the peak night. Doses logged in a different
+     * (historical) unit still appear in the night rows but are kept out of those numbers.
      */
     val unit: String,
-    /** First day of the window, inclusive. */
+    /** Start date of the first included night. */
     val startDate: LocalDate,
-    /** Last day of the window, inclusive — the day before the report was requested. */
+    /** Start date of the last completed night; its window ends on the next date. */
     val endDate: LocalDate,
     val generatedAt: LocalDateTime,
-    val weeks: List<ReportWeek>
+    val weeks: List<ReportWeek>,
+    val nightCycle: NightCycle = NightCycle()
 ) {
     val days: List<ReportDay> = weeks.flatMap { it.days }
     val dayCount: Int = days.size
@@ -68,41 +67,41 @@ class MedicineReport(
     val averagePerDay: Double = if (days.isEmpty()) 0.0 else primaryTotal / dayCount
     val daysWithDoses: Int = days.count { it.doses.isNotEmpty() }
     val peakDay: ReportDay? = days.filter { it.primaryTotal > 0 }.maxByOrNull { it.primaryTotal }
-    /** Largest daily total; shared y-scale of every chart so weeks stay comparable. */
+    /** Largest nightly total; shared y-scale of every chart so weeks stay comparable. */
     val maxDailyTotal: Double = days.maxOfOrNull { it.primaryTotal } ?: 0.0
     val hasForeignUnits: Boolean = days.any { it.hasForeignUnits }
 
-    /** Dose counts in the four six-hour blocks of the day: 0–6, 6–12, 12–18, 18–24. */
+    /** Dose counts in four six-hour blocks relative to the configured night start. */
     val timeOfDayCounts: List<Int> = run {
-        val zone = ZoneId.systemDefault()
         val counts = IntArray(4)
         days.flatMap { it.doses }.forEach { dose ->
-            val hour = Instant.ofEpochMilli(dose.timestamp).atZone(zone).hour
-            counts[hour / 6]++
+            counts[nightCycle.timeBlockAt(dose.timestamp)]++
         }
         counts.toList()
     }
 }
 
 /**
- * Builds the report for the [days] days before [reportDate] ([reportDate] itself excluded).
+ * Builds the report for [days] completed nights before [reportDate] (a night start date).
  * [days] is clamped to [[MIN_REPORT_DAYS], [MAX_REPORT_DAYS]]. Logs outside the window are
  * dropped, so callers may pass a loosely filtered list.
  */
 fun buildMedicineReport(
     medicine: Medicine,
     logs: List<DoseLog>,
-    reportDate: LocalDate = LocalDate.now(),
+    reportDate: LocalDate? = null,
     generatedAt: LocalDateTime = LocalDateTime.now(),
-    days: Int = DEFAULT_REPORT_DAYS
+    days: Int = DEFAULT_REPORT_DAYS,
+    nightCycle: NightCycle = NightCycle()
 ): MedicineReport {
     val window = days.coerceIn(MIN_REPORT_DAYS, MAX_REPORT_DAYS)
-    val start = reportDate.minusDays(window.toLong())
-    val end = reportDate.minusDays(1)
+    val anchor = reportDate ?: nightCycle.dateAt(System.currentTimeMillis())
+    val start = anchor.minusDays(window.toLong())
+    val end = anchor.minusDays(1)
 
     val byDate = logs
         .sortedWith(compareBy({ it.timestamp }, { it.id }))
-        .groupBy { it.timestamp.toLocalDate() }
+        .groupBy { nightCycle.dateAt(it.timestamp) }
         .filterKeys { !it.isBefore(start) && !it.isAfter(end) }
 
     val days = generateSequence(start) { it.plusDays(1) }
@@ -124,7 +123,8 @@ fun buildMedicineReport(
         startDate = start,
         endDate = end,
         generatedAt = generatedAt,
-        weeks = weeks
+        weeks = weeks,
+        nightCycle = nightCycle
     )
 }
 

@@ -2,6 +2,8 @@ package com.medtracker.app
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.medtracker.app.data.Medicine
+import com.medtracker.app.data.DoseLog
+import com.medtracker.app.data.NightCycle
 import com.medtracker.app.data.decodeBackup
 import com.medtracker.app.data.encodeBackup
 import org.junit.Assert.assertEquals
@@ -9,6 +11,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.time.LocalTime
 
 /**
  * Backup uses org.json, which is only real on a device, so these run as instrumented
@@ -16,6 +19,29 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class BackupTest {
+
+    @Test
+    fun nightStartAndOriginalTimestampsSurviveRoundTrip() {
+        val cycle = NightCycle(LocalTime.of(19, 35))
+        val log = DoseLog(1, 1, "Medicine", 1.0, "tablet", 1_780_000_000_123)
+        val decoded = decodeBackup(encodeBackup(emptyList(), listOf(log), cycle))
+        assertEquals(cycle, decoded.nightCycle)
+        assertEquals(listOf(log), decoded.doseLogs)
+    }
+
+    @Test
+    fun backupWithoutNightStartLeavesPreferenceUnspecified() {
+        val json = """{"version":1,"medicines":[],"doseLogs":[]}"""
+        assertNull(decodeBackup(json).nightCycle)
+    }
+
+    @Test
+    fun invalidNightStartIsRejectedBeforeImport() {
+        listOf(-1, 1440).forEach { minutes ->
+            val json = """{"version":1,"medicines":[],"doseLogs":[],"nightStartMinutes":$minutes}"""
+            assertThrows(IllegalArgumentException::class.java) { decodeBackup(json) }
+        }
+    }
 
     private fun roundTripMedicines(medicines: List<Medicine>): Map<Long, Medicine> =
         decodeBackup(encodeBackup(medicines, emptyList())).medicines.associateBy { it.id }

@@ -72,6 +72,8 @@ fun LocalDate.atTimeMillis(time: LocalTime): Long =
 fun Long.toLocalDate(): LocalDate =
     Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()).toLocalDate()
 
+fun Long.toLocalDateLabel(): String = toLocalDate().format(DateTimeFormatter.ofPattern("d MMM"))
+
 private val TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm")
 
 fun Long.toTimeString(): String =

@@ -102,6 +102,7 @@ fun MedicinesScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     val medicines by viewModel.medicines.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
+    val nightCycle by viewModel.nightCycle.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
     var medicineToEdit by remember { mutableStateOf<Medicine?>(null) }
     var medicineToDelete by remember { mutableStateOf<Medicine?>(null) }
@@ -199,7 +200,7 @@ fun MedicinesScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
         }
     ) { padding ->
         if (medicines.isEmpty()) {
-            Column(Modifier.fillMaxSize().padding(padding)) {
+            Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())) {
                 Text(
                     "Settings",
                     style = MaterialTheme.typography.headlineMedium,
@@ -208,6 +209,11 @@ fun MedicinesScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
                 AppearanceCard(
                     themeMode = themeMode,
                     onThemeModeChange = viewModel::setThemeMode,
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp)
+                )
+                NightCycleSettings(
+                    cycle = nightCycle,
+                    onStartChange = viewModel::setNightStart,
                     modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp)
                 )
                 BackupActions(
@@ -219,8 +225,9 @@ fun MedicinesScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
                     icon = AppIcons.Pill,
                     title = "No medicines yet",
                     body = "Use “Add medicine” to save a medicine with its name and default dosage.",
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.height(260.dp)
                 )
+                Spacer(Modifier.height(96.dp))
             }
         } else {
             val listState = rememberLazyListState()
@@ -248,6 +255,9 @@ fun MedicinesScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
                 }
                 item(key = "backup") {
                     BackupActions(onExport = onExport, onImport = onImport)
+                }
+                item(key = "nightCycle") {
+                    NightCycleSettings(cycle = nightCycle, onStartChange = viewModel::setNightStart)
                 }
                 item(key = "medsHeader") {
                     Row(
@@ -391,7 +401,7 @@ fun MedicinesScreen(viewModel: AppViewModel, onMessage: (String) -> Unit) {
         AlertDialog(
             onDismissRequest = { pendingImportText = null },
             title = { Text("Import backup?") },
-            text = { Text("This replaces all current medicines and dose history with the selected backup.") },
+            text = { Text("This replaces all current medicines and dose history with the selected backup, including its night start time if present.") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -542,7 +552,7 @@ private fun MedicineRow(
                     buildString {
                         append("Default ${formatAmount(medicine.defaultAmount)} ${medicine.unit}")
                         medicine.dailyMaxAmount?.let {
-                            append(" · max ${formatAmount(it)} ${medicine.unit}/day")
+                            append(" · max ${formatAmount(it)} ${medicine.unit}/night")
                         }
                         medicine.halfLifeHours?.let {
                             append(" · half-life ${formatAmount(it)} h")
@@ -611,14 +621,14 @@ private fun ReportDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    "Report for ${medicine.name}, ending yesterday. Preview it in the app or save the same data as a PDF.",
+                    "Report for ${medicine.name} over completed nights. The current night is excluded. Preview it in the app or save the same data as a PDF.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 OutlinedTextField(
                     value = daysText,
                     onValueChange = onDaysChange,
-                    label = { Text("Days") },
+                    label = { Text("Nights") },
                     singleLine = true,
                     isError = !daysValid,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -647,7 +657,7 @@ private fun ReportDialog(
                 }
                 if (!daysValid) {
                     Text(
-                        "Enter a whole number of days between $MIN_REPORT_DAYS and $MAX_REPORT_DAYS.",
+                        "Enter a whole number of nights between $MIN_REPORT_DAYS and $MAX_REPORT_DAYS.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error
                     )
@@ -792,7 +802,7 @@ private fun MedicineDialog(
                 OutlinedTextField(
                     value = maxText,
                     onValueChange = { maxText = it },
-                    label = { Text("Daily max (optional)") },
+                    label = { Text("Nightly max (optional)") },
                     singleLine = true,
                     isError = !maxValid,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -801,7 +811,7 @@ private fun MedicineDialog(
                 )
                 Text(
                     if (!maxValid) "Enter a number above 0, or leave empty for no limit."
-                    else "Over this daily total the home button and charts turn red — nothing is blocked.",
+                    else "Over this nightly total the home button and charts turn red — nothing is blocked.",
                     style = MaterialTheme.typography.bodySmall,
                     color = if (!maxValid) MaterialTheme.colorScheme.error
                     else MaterialTheme.colorScheme.onSurfaceVariant
@@ -1124,7 +1134,7 @@ private fun reportFileName(medicine: Medicine, days: Int): String {
         .take(40)
         .ifEmpty { "medicine" }
     val date = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE)
-    return "medtracker-report-$slug-${days}d-$date.pdf"
+    return "medtracker-report-$slug-${days}n-$date.pdf"
 }
 
 private fun Throwable.readableMessage(): String =

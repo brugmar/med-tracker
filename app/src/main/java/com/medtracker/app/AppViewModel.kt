@@ -2,16 +2,18 @@ package com.medtracker.app
 
 import android.app.Application
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.medtracker.app.data.AppDatabase
 import com.medtracker.app.data.DoseLog
 import com.medtracker.app.data.Medicine
+import com.medtracker.app.data.MedTrackerDao
+import com.medtracker.app.data.NightCycle
 import com.medtracker.app.data.TodayStat
 import com.medtracker.app.data.calculateRemainingAmount
 import com.medtracker.app.data.decodeBackup
 import com.medtracker.app.data.encodeBackup
-import com.medtracker.app.data.startMillis
 import com.medtracker.app.report.DEFAULT_REPORT_DAYS
 import com.medtracker.app.report.MAX_REPORT_DAYS
 import com.medtracker.app.report.MIN_REPORT_DAYS
@@ -25,6 +27,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -32,6 +35,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
+import java.time.LocalTime
 
 /** In-app theme override; SYSTEM follows the device setting. */
 enum class ThemeMode(val key: String, val label: String) {
@@ -46,10 +50,21 @@ enum class ThemeMode(val key: String, val label: String) {
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class AppViewModel(application: Application) : AndroidViewModel(application) {
+class AppViewModel internal constructor(
+    application: Application,
+    private val dao: MedTrackerDao,
+    private val prefs: SharedPreferences
+) : AndroidViewModel(application) {
+    constructor(application: Application) : this(
+        application,
+        AppDatabase.get(application).dao(),
+        application.getSharedPreferences("settings", Context.MODE_PRIVATE)
+    )
 
-    private val dao = AppDatabase.get(application).dao()
-    private val prefs = application.getSharedPreferences("settings", Context.MODE_PRIVATE)
+    private val _nightCycle = MutableStateFlow(
+        NightCycle.fromMinutes(prefs.getInt(KEY_NIGHT_START, 17 * 60).coerceIn(0, 1439))
+    )
+    val nightCycle: StateFlow<NightCycle> = _nightCycle.asStateFlow()
 
     val themeMode = MutableStateFlow(ThemeMode.fromKey(prefs.getString(KEY_THEME_MODE, null)))
 
@@ -63,8 +78,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _medicines = MutableStateFlow<List<Medicine>>(emptyList())
     val medicines: StateFlow<List<Medicine>> = _medicines.asStateFlow()
 
-    /** Anchor for "today" and clock for the live remaining-amount estimate. */
-    private val today = MutableStateFlow(LocalDate.now())
+    /** Night anchor and clock for the live remaining-amount estimate. */
+    private val _currentNight = MutableStateFlow(nightCycle.value.dateAt(System.currentTimeMillis()))
+    val currentNight: StateFlow<LocalDate> = _currentNight.asStateFlow()
     private val currentTimeMillis = MutableStateFlow(System.currentTimeMillis())
 
     init {
@@ -72,22 +88,42 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             dao.medicines().collect { _medicines.value = it }
         }
         viewModelScope.launch {
-            while (true) {
-                delay(REMAINING_AMOUNT_REFRESH_MILLIS)
-                currentTimeMillis.value = System.currentTimeMillis()
+            nightCycle.collectLatest { cycle ->
+                while (true) {
+                    val now = System.currentTimeMillis()
+                    val night = cycle.dateAt(now)
+                    val untilBoundary = cycle.endMillis(night) - now
+                    delay(minOf(REMAINING_AMOUNT_REFRESH_MILLIS, untilBoundary).coerceAtLeast(1))
+                    refreshToday()
+                }
             }
         }
     }
 
-    /** Refreshed on resume so an app left open survives midnight and shows current decay. */
+    /** Refreshed on resume and every minute, including across the night boundary. */
     fun refreshToday() {
-        today.value = LocalDate.now()
-        currentTimeMillis.value = System.currentTimeMillis()
+        val timestamp = System.currentTimeMillis()
+        val previousNight = _currentNight.value
+        val nextNight = nightCycle.value.dateAt(timestamp)
+        _currentNight.value = nextNight
+        if (statsDay.value == previousNight || statsDay.value.isAfter(nextNight)) {
+            statsDay.value = nextNight
+        }
+        currentTimeMillis.value = timestamp
     }
 
-    /** Per-medicine total amount and dose count for the current day. */
-    val todayStats: StateFlow<Map<Long, TodayStat>> = today
-        .flatMapLatest { day -> dao.logsBetween(day.startMillis(), day.plusDays(1).startMillis()) }
+    fun setNightStart(time: LocalTime) {
+        val cycle = NightCycle(time.withSecond(0).withNano(0))
+        prefs.edit().putInt(KEY_NIGHT_START, cycle.startMinutes).apply()
+        _nightCycle.value = cycle
+        refreshToday()
+    }
+
+    /** Re-queries raw timestamps when the boundary changes, including historical logs. */
+    val todayStats: StateFlow<Map<Long, TodayStat>> = combine(currentNight, nightCycle) { day, cycle ->
+        day to cycle
+    }
+        .flatMapLatest { (day, cycle) -> dao.logsBetween(cycle.startMillis(day), cycle.endMillis(day)) }
         .map { logs ->
             logs.groupBy { it.medicineId }
                 .mapValues { (_, doses) -> TodayStat(doses.sumOf { it.amount }, doses.size) }
@@ -111,34 +147,34 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // ---- Statistics tab ----
 
     val statsMedicineId = MutableStateFlow<Long?>(null)
-    val statsDay = MutableStateFlow(LocalDate.now())
+    val statsDay = MutableStateFlow(currentNight.value)
 
     fun selectStatsMedicine(id: Long) {
         statsMedicineId.value = id
     }
 
     fun selectStatsDay(day: LocalDate) {
-        statsDay.value = day
+        statsDay.value = minOf(day, currentNight.value)
     }
 
-    /** Doses of the selected medicine on the selected day. */
+    /** Doses of the selected medicine in the selected night. */
     val statsDayLogs: StateFlow<List<DoseLog>> =
-        combine(statsMedicineId, statsDay) { id, day -> id to day }
-            .flatMapLatest { (id, day) ->
+        combine(statsMedicineId, statsDay, nightCycle) { id, day, cycle -> Triple(id, day, cycle) }
+            .flatMapLatest { (id, day, cycle) ->
                 if (id == null) flowOf(emptyList())
-                else dao.logsForMedicineBetween(id, day.startMillis(), day.plusDays(1).startMillis())
+                else dao.logsForMedicineBetween(id, cycle.startMillis(day), cycle.endMillis(day))
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** Last 30 days of the selected medicine; feeds the week and month charts. */
+    /** Last 30 nights of the selected medicine; feeds both chart ranges. */
     val statsRangeLogs: StateFlow<List<DoseLog>> =
-        combine(statsMedicineId, today) { id, anchor -> id to anchor }
-            .flatMapLatest { (id, anchor) ->
+        combine(statsMedicineId, currentNight, nightCycle) { id, anchor, cycle -> Triple(id, anchor, cycle) }
+            .flatMapLatest { (id, anchor, cycle) ->
                 if (id == null) flowOf(emptyList())
                 else dao.logsForMedicineBetween(
                     id,
-                    anchor.minusDays(29).startMillis(),
-                    anchor.plusDays(1).startMillis()
+                    cycle.startMillis(anchor.minusDays(29)),
+                    cycle.endMillis(anchor)
                 )
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -224,20 +260,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { dao.updateLog(log) }
     }
 
-    /** Report over the [days] days before today (today excluded), for the PDF export. */
+    /** Report over completed nights; the current, incomplete night is excluded. */
     suspend fun medicineReportFor(
         medicine: Medicine,
         days: Int = DEFAULT_REPORT_DAYS
     ): MedicineReport {
         val window = days.coerceIn(MIN_REPORT_DAYS, MAX_REPORT_DAYS)
-        val today = LocalDate.now()
+        val cycle = nightCycle.value
+        val today = cycle.dateAt(System.currentTimeMillis())
         val logs = dao.logsForMedicineOnce(
             medicine.id,
-            today.minusDays(window.toLong()).startMillis(),
-            today.startMillis()
+            cycle.startMillis(today.minusDays(window.toLong())),
+            cycle.startMillis(today)
         )
         return withContext(Dispatchers.Default) {
-            buildMedicineReport(medicine, logs, today, days = window)
+            buildMedicineReport(medicine, logs, today, days = window, nightCycle = cycle)
         }
     }
 
@@ -245,7 +282,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val medicines = dao.allMedicinesForBackup()
         val doseLogs = dao.allLogsForBackup()
         return withContext(Dispatchers.Default) {
-            encodeBackup(medicines = medicines, doseLogs = doseLogs)
+            encodeBackup(medicines = medicines, doseLogs = doseLogs, nightCycle = nightCycle.value)
         }
     }
 
@@ -254,11 +291,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             decodeBackup(text)
         }
         dao.replaceAllData(backup.medicines, backup.doseLogs)
+        backup.nightCycle?.let { setNightStart(it.startTime) }
         refreshToday()
     }
 
     private companion object {
         const val KEY_THEME_MODE = "theme_mode"
+        const val KEY_NIGHT_START = "night_start_minutes"
         const val REMAINING_AMOUNT_REFRESH_MILLIS = 60_000L
     }
 }

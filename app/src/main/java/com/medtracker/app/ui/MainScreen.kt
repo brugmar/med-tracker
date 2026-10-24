@@ -71,13 +71,13 @@ import com.medtracker.app.AppViewModel
 import com.medtracker.app.data.Medicine
 import com.medtracker.app.data.TodayStat
 import com.medtracker.app.data.formatAmount
+import com.medtracker.app.data.nightDateLabel
+import com.medtracker.app.data.nightWeekdayLabel
 import com.medtracker.app.data.parseAmount
 import com.medtracker.app.data.presetAmounts
 import com.medtracker.app.ui.theme.MedicineAccent
 import com.medtracker.app.ui.theme.medicineAccent
-import java.time.LocalDate
 import java.time.LocalTime
-import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 @Composable
@@ -89,6 +89,8 @@ fun MainScreen(
     val medicines by viewModel.medicines.collectAsState()
     val todayStats by viewModel.todayStats.collectAsState()
     val remainingAmounts by viewModel.remainingAmounts.collectAsState()
+    val night by viewModel.currentNight.collectAsState()
+    val cycle by viewModel.nightCycle.collectAsState()
     var medicineToLog by remember { mutableStateOf<Medicine?>(null) }
 
     if (medicines.isEmpty()) {
@@ -114,14 +116,18 @@ fun MainScreen(
             item(key = "header") {
                 Column(Modifier.padding(top = 8.dp, bottom = 4.dp)) {
                     Text(
-                        LocalDate.now()
-                            .format(DateTimeFormatter.ofPattern("EEEE d MMMM"))
-                            .uppercase(Locale.getDefault()),
+                        "Night ${night.nightWeekdayLabel()}".uppercase(Locale.getDefault()),
                         style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.2.sp),
                         color = MaterialTheme.colorScheme.primary
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(greeting(), style = MaterialTheme.typography.headlineMedium)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "${night.nightDateLabel()} · ${cycle.windowLabel}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
             item(key = "summary") {
@@ -215,8 +221,8 @@ private fun TodayHeroCard(medicines: List<Medicine>, stats: Map<Long, TodayStat>
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    if (complete) "All logged for today"
-                    else "$logged of ${medicines.size} logged today",
+                    if (complete) "All logged for this night"
+                    else "$logged of ${medicines.size} logged this night",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
@@ -341,7 +347,7 @@ private fun MedicineCard(
                         )
                         Text(
                             if (overMax) "over ${formatAmount(max!!)} ${medicine.unit} max"
-                            else if (todayStat.count == 1) "1 dose today" else "${todayStat.count} doses today",
+                            else if (todayStat.count == 1) "1 dose this night" else "${todayStat.count} doses this night",
                             style = MaterialTheme.typography.bodySmall,
                             color = if (overMax) MaterialTheme.colorScheme.error
                             else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -481,8 +487,8 @@ private fun LogDoseSheet(
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        if (todayStat == null) "Nothing logged yet today"
-                        else "Today so far: ${formatAmount(todayStat.total)} ${medicine.unit} · " +
+                        if (todayStat == null) "Nothing logged yet this night"
+                        else "This night: ${formatAmount(todayStat.total)} ${medicine.unit} · " +
                             (if (todayStat.count == 1) "1 dose" else "${todayStat.count} doses"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant

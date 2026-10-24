@@ -6,6 +6,27 @@ working commands as of 2026-06-12.
 
 Last refreshed by re-reading and updating the project on 2026-06-12.
 
+## Night-cycle update (2026-10-24)
+
+The app now groups intake by configurable nights, defaulting to 17:00 through
+16:59 the following day. Older calendar-day descriptions below are superseded
+by this section. `data/NightCycle.kt` owns local-time boundaries, grouping,
+clock-time edits, labels, and relative six-hour report buckets. All windows are
+half-open [start, next start); no dose timestamps are rewritten on a setting
+change. `AppViewModel.nightCycle` and `currentNight` drive reactive Room queries
+for home totals, selected-night history, charts and completed-night reports.
+The clock refreshes on resume, every minute and at the exact night boundary.
+
+Settings contains `NightCycleSettings`; its HH:mm preference is persisted as
+`night_start_minutes` in the existing `settings` SharedPreferences. Room stays
+at schema version 6. Version-1 JSON backups gain optional `nightStartMinutes`;
+old backups preserve the existing preference when imported. The former daily
+maximum now applies per night; the persisted `dailyMaxAmount` field name stays
+compatible. Remaining-in-body estimates still use actual elapsed time.
+
+Tests cover night boundaries, DST, historical regrouping, reports, backups,
+and reactive ViewModel queries using an isolated in-memory Room database.
+
 ## Project identity
 
 - Name: Med Tracker / MedTracker.

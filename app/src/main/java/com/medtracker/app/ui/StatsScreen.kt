@@ -61,16 +61,17 @@ import androidx.compose.ui.unit.dp
 import com.medtracker.app.AppViewModel
 import com.medtracker.app.data.DoseLog
 import com.medtracker.app.data.Medicine
-import com.medtracker.app.data.atTimeMillis
+import com.medtracker.app.data.NightCycle
 import com.medtracker.app.data.formatAmount
+import com.medtracker.app.data.nightChartLabel
+import com.medtracker.app.data.nightDateLabel
+import com.medtracker.app.data.nightWeekdayLabel
 import com.medtracker.app.data.parseTime
-import com.medtracker.app.data.toLocalDate
+import com.medtracker.app.data.toLocalDateLabel
 import com.medtracker.app.data.toTimeString
 import com.medtracker.app.ui.theme.MedicineAccent
 import com.medtracker.app.ui.theme.medicineAccent
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 @Composable
 fun StatsScreen(viewModel: AppViewModel) {
@@ -79,6 +80,8 @@ fun StatsScreen(viewModel: AppViewModel) {
     val day by viewModel.statsDay.collectAsState()
     val dayLogs by viewModel.statsDayLogs.collectAsState()
     val rangeLogs by viewModel.statsRangeLogs.collectAsState()
+    val currentNight by viewModel.currentNight.collectAsState()
+    val cycle by viewModel.nightCycle.collectAsState()
 
     // Keep a valid selection: first medicine by default, or after a deletion.
     LaunchedEffect(medicines, selectedId) {
@@ -151,6 +154,8 @@ fun StatsScreen(viewModel: AppViewModel) {
             medicine = selectedMedicine,
             accent = accent,
             day = day,
+            currentNight = currentNight,
+            cycle = cycle,
             logs = dayLogs,
             onPreviousDay = { viewModel.selectStatsDay(day.minusDays(1)) },
             onNextDay = { viewModel.selectStatsDay(day.plusDays(1)) },
@@ -164,6 +169,8 @@ fun StatsScreen(viewModel: AppViewModel) {
             accent = accent,
             logs = rangeLogs,
             days = chartDays,
+            currentNight = currentNight,
+            cycle = cycle,
             onDaysChange = { chartDays = it }
         )
         Spacer(Modifier.height(4.dp))
@@ -175,6 +182,8 @@ private fun DayCard(
     medicine: Medicine,
     accent: MedicineAccent,
     day: LocalDate,
+    currentNight: LocalDate,
+    cycle: NightCycle,
     logs: List<DoseLog>,
     onPreviousDay: () -> Unit,
     onNextDay: () -> Unit,
@@ -183,7 +192,7 @@ private fun DayCard(
 ) {
     var logToDelete by remember { mutableStateOf<DoseLog?>(null) }
     var logToEditTime by remember { mutableStateOf<DoseLog?>(null) }
-    val today = LocalDate.now()
+    val today = currentNight
     val total = logs.sumOf { it.amount }
     val overMax = medicine.dailyMaxAmount?.let { total > it } ?: false
     val totalColor = when {
@@ -202,15 +211,15 @@ private fun DayCard(
                 IconButton(onClick = onPreviousDay) {
                     Icon(
                         Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                        contentDescription = "Previous day",
+                        contentDescription = "Previous night",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 Text(
                     text = when (day) {
-                        today -> "Today"
-                        today.minusDays(1) -> "Yesterday"
-                        else -> day.format(DateTimeFormatter.ofPattern("EEE, d MMM yyyy"))
+                        today -> "Current night · ${day.nightWeekdayLabel()}"
+                        today.minusDays(1) -> "Previous night · ${day.nightWeekdayLabel()}"
+                        else -> "Night ${day.nightWeekdayLabel()}"
                     },
                     style = MaterialTheme.typography.titleMedium,
                     textAlign = TextAlign.Center,
@@ -219,12 +228,20 @@ private fun DayCard(
                 IconButton(onClick = onNextDay, enabled = day.isBefore(today)) {
                     Icon(
                         Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = "Next day",
+                        contentDescription = "Next night",
                         tint = if (day.isBefore(today)) MaterialTheme.colorScheme.onSurfaceVariant
                         else MaterialTheme.colorScheme.outlineVariant
                     )
                 }
             }
+
+            Text(
+                "${day.nightDateLabel()}\n${cycle.windowLabel}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
 
             Spacer(Modifier.height(4.dp))
             Row(Modifier.align(Alignment.CenterHorizontally)) {
@@ -268,7 +285,7 @@ private fun DayCard(
                             color = MaterialTheme.colorScheme.surfaceContainerHigh
                         ) {
                             Text(
-                                log.timestamp.toTimeString(),
+                                "${log.timestamp.toLocalDateLabel()} ${log.timestamp.toTimeString()}",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
@@ -330,6 +347,7 @@ private fun DayCard(
         EditLogTimeDialog(
             log = log,
             day = day,
+            cycle = cycle,
             onDismiss = { logToEditTime = null },
             onSave = { updatedLog ->
                 onUpdateLog(updatedLog)
@@ -343,12 +361,14 @@ private fun DayCard(
 private fun EditLogTimeDialog(
     log: DoseLog,
     day: LocalDate,
+    cycle: NightCycle,
     onDismiss: () -> Unit,
     onSave: (DoseLog) -> Unit
 ) {
     var timeText by remember(log) { mutableStateOf(log.timestamp.toTimeString()) }
     val parsedTime = parseTime(timeText)
-    val valid = parsedTime != null
+    val timestamp = parsedTime?.let { cycle.timestampAt(day, it) }
+    val valid = timestamp != null
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -358,6 +378,13 @@ private fun EditLogTimeDialog(
                 Text(
                     "${log.medicineName}, ${formatAmount(log.amount)} ${log.unit}",
                     style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "Night ${day.nightWeekdayLabel()} · ${day.nightDateLabel()}\n" +
+                        "${cycle.windowLabel}. Times before ${cycle.startLabel} belong to the next calendar date.",
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(Modifier.height(12.dp))
@@ -373,7 +400,8 @@ private fun EditLogTimeDialog(
                 if (!valid) {
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "Use 24-hour time, e.g. 08:30 or 21:05.",
+                        if (parsedTime == null) "Use 24-hour time, e.g. 08:30 or 21:05."
+                        else "This clock time does not occur in the selected night because of the clock change.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error
                     )
@@ -384,7 +412,7 @@ private fun EditLogTimeDialog(
             TextButton(
                 enabled = valid,
                 onClick = {
-                    onSave(log.copy(timestamp = day.atTimeMillis(parsedTime!!)))
+                    onSave(log.copy(timestamp = timestamp!!))
                 }
             ) { Text("Save") }
         },
@@ -402,11 +430,13 @@ private fun ChartCard(
     accent: MedicineAccent,
     logs: List<DoseLog>,
     days: Int,
+    currentNight: LocalDate,
+    cycle: NightCycle,
     onDaysChange: (Int) -> Unit
 ) {
-    val today = LocalDate.now()
-    val dailyTotals = remember(logs) {
-        logs.groupBy { it.timestamp.toLocalDate() }
+    val today = currentNight
+    val dailyTotals = remember(logs, cycle) {
+        logs.groupBy { cycle.dateAt(it.timestamp) }
             .mapValues { (_, dayLogs) -> dayLogs.sumOf { it.amount } }
     }
     val dates = remember(today, days) {
@@ -426,7 +456,7 @@ private fun ChartCard(
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "Last $days days",
+                    "Last $days nights",
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f)
                 )
@@ -437,7 +467,7 @@ private fun ChartCard(
                             onClick = { onDaysChange(range) },
                             shape = SegmentedButtonDefaults.itemShape(index, CHART_RANGES.size),
                             icon = {},
-                            label = { Text("${range}d") }
+                            label = { Text("${range}n") }
                         )
                     }
                 }
@@ -445,9 +475,10 @@ private fun ChartCard(
             Spacer(Modifier.height(6.dp))
             Text(
                 buildString {
-                    append("Total ${formatAmount(total)} ${medicine.unit} · avg excl. today ")
-                    append("${formatAmount(averageExcludingToday)} ${medicine.unit}/day")
-                    medicine.dailyMaxAmount?.let { append(" · max ${formatAmount(it)} ${medicine.unit}/day") }
+                    append("Total ${formatAmount(total)} ${medicine.unit} · avg excl. current night ")
+                    append("${formatAmount(averageExcludingToday)} ${medicine.unit}/night")
+                    medicine.dailyMaxAmount?.let { append(" · max ${formatAmount(it)} ${medicine.unit}/night") }
+                    append("\n${cycle.windowLabel} · labels show the night’s start/end dates")
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -468,8 +499,8 @@ private fun ChartCard(
 
 private fun chartLabel(days: Int, index: Int, date: LocalDate): String =
     if (days <= 7) {
-        date.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, Locale.getDefault())
+        date.nightWeekdayLabel()
     } else {
         // Label today and then every 5th day counting backwards.
-        if ((days - 1 - index) % 5 == 0) date.dayOfMonth.toString() else ""
+        if ((days - 1 - index) % 5 == 0) date.nightChartLabel() else ""
     }

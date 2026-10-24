@@ -48,7 +48,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Keep "today" correct if the app stayed open across midnight.
+        // Refresh the active night and elapsed-time estimates after resuming.
         viewModel.refreshToday()
     }
 }
